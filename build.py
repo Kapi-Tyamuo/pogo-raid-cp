@@ -74,10 +74,6 @@ standalone = html(f'<link rel="icon" href="{EMOJI_ICON}">\n'
 io.open(os.path.join(HERE, "index.html"), "w", encoding="utf-8").write(standalone)
 
 # --- PWA（docs/） -----------------------------------------------------------
-# キャッシュ名にページの内容のハッシュを入れておくと、ビルドし直すだけで
-# 端末側の Service Worker が古いキャッシュを捨てて入れ替わる。
-version = hashlib.sha256(page.encode("utf-8")).hexdigest()[:12]
-
 ICONS = [("icon-180.png", "icon.svg", 180),
          ("icon-192.png", "icon.svg", 192),
          ("icon-512.png", "icon.svg", 512),
@@ -102,14 +98,31 @@ pwa_body = """<script>
 // 初回だけ通信して端末にキャッシュし、以降はオフラインで動かす。
 // file:// で開いたときは Service Worker を使えないので黙って諦める。
 if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  // すでに Service Worker に載っているページだけ、入れ替わりを見張る。
+  // 初回訪問時は controller が無く、claim されるだけで載せ替えではないので何もしない。
+  if (navigator.serviceWorker.controller) {
+    var reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      // 新しい版が有効になった時点で読み直す。これをしないと、内容を更新しても
+      // 次に開いたときはまだ古いキャッシュが表示されてしまう。
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
+  }
   addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js").catch(function () {});
   });
 }
 </script>"""
 
-io.open(os.path.join(DIST, "index.html"), "w", encoding="utf-8").write(
-    html(pwa_head, pwa_body))
+pwa_html = html(pwa_head, pwa_body)
+io.open(os.path.join(DIST, "index.html"), "w", encoding="utf-8").write(pwa_html)
+
+# キャッシュ名は配信する HTML そのもののハッシュから作る。アプリ本体だけでなく
+# SW 登録スクリプトなどラッパー側を直したときも必ず変わるようにしておく
+# （sw.js 自身はハッシュの対象に入らないので循環しない）。
+version = hashlib.sha256(pwa_html.encode("utf-8")).hexdigest()[:12]
 
 manifest = {
     "name": TITLE,

@@ -129,6 +129,8 @@
     color: var(--muted); background: transparent;
     border: 1px dashed var(--line); border-radius: var(--radius); cursor: pointer;
   }
+  /* .more の display:block が UA の [hidden]{display:none} に勝つので明示的に消す */
+  .more[hidden] { display: none; }
   .more:hover { color: var(--accent); border-color: var(--accent); }
   .more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 

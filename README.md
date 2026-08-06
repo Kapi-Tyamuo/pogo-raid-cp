@@ -54,8 +54,9 @@ CPM は `game_master` の `playerLevel.cpMultiplier`（Lv20 = 0.5974、Lv25 = 0.
 
 公開設定は リポジトリの Settings → Pages → Source: `Deploy from a branch` → `main` / `/docs`。
 
-ビルドし直すと `sw.js` のキャッシュ名（ページ内容のSHA-256の先頭12桁）が変わり、
-次回の起動時に端末側のキャッシュが自動で入れ替わる。
+ビルドし直すと `sw.js` のキャッシュ名（配信する `docs/index.html` のSHA-256の先頭12桁）が変わる。
+新しい Service Worker が有効になった時点でページ側が `controllerchange` を拾って読み直すので、
+**開いたその場で新しい版に切り替わる**（この処理がないと、次に開くまで古いキャッシュが表示される）。
 
 ### ファイルを直接渡す
 

@@ -148,6 +148,8 @@
     color: var(--muted); background: transparent;
     border: 1px dashed var(--line); border-radius: var(--radius); cursor: pointer;
   }
+  /* .more の display:block が UA の [hidden]{display:none} に勝つので明示的に消す */
+  .more[hidden] { display: none; }
   .more:hover { color: var(--accent); border-color: var(--accent); }
   .more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -660,6 +662,18 @@
 // 初回だけ通信して端末にキャッシュし、以降はオフラインで動かす。
 // file:// で開いたときは Service Worker を使えないので黙って諦める。
 if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+  // すでに Service Worker に載っているページだけ、入れ替わりを見張る。
+  // 初回訪問時は controller が無く、claim されるだけで載せ替えではないので何もしない。
+  if (navigator.serviceWorker.controller) {
+    var reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      // 新しい版が有効になった時点で読み直す。これをしないと、内容を更新しても
+      // 次に開いたときはまだ古いキャッシュが表示されてしまう。
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
+  }
   addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js").catch(function () {});
   });
