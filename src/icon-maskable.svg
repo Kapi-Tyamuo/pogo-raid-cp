@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Android の maskable 用。円形に切られても欠けないよう中央60%に収める -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e3a8a"/>
+      <stop offset="1" stop-color="#0d1017"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g transform="translate(256 256) scale(0.62) translate(-256 -256)">
+    <path d="M300 44 L146 286 L238 286 L212 468 L366 226 L274 226 Z" fill="#f4d23c"/>
+  </g>
+</svg>

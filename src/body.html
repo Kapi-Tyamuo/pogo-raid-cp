@@ -1,0 +1,638 @@
+<style>
+  :root {
+    --bg: #f4f6fa;
+    --panel: #ffffff;
+    --panel-2: #eef1f7;
+    --line: #dfe4ee;
+    --text: #14181f;
+    --muted: #667085;
+    --accent: #2f6df6;
+    --accent-soft: #e6edfe;
+    --good: #16a34a;
+    --warn: #d97706;
+    --shadow-c: #7c3aed;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1017;
+      --panel: #161b24;
+      --panel-2: #1e2531;
+      --line: #2a3241;
+      --text: #e8ecf3;
+      --muted: #94a0b4;
+      --accent: #6b9bff;
+      --accent-soft: #1c2a45;
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --shadow-c: #a78bfa;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1017; --panel: #161b24; --panel-2: #1e2531; --line: #2a3241;
+    --text: #e8ecf3; --muted: #94a0b4; --accent: #6b9bff; --accent-soft: #1c2a45;
+    --good: #4ade80; --warn: #fbbf24; --shadow-c: #a78bfa;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f6fa; --panel: #ffffff; --panel-2: #eef1f7; --line: #dfe4ee;
+    --text: #14181f; --muted: #667085; --accent: #2f6df6; --accent-soft: #e6edfe;
+    --good: #16a34a; --warn: #d97706; --shadow-c: #7c3aed;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 12px 96px; }
+
+  /* ---- header ---- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: saturate(1.6) blur(12px);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 0 8px;
+  }
+  .title { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 8px; }
+  .title h1 { font-size: 16px; margin: 0; letter-spacing: .01em; }
+  .title span { font-size: 11px; color: var(--muted); }
+  .searchbox { position: relative; }
+  .searchbox input {
+    width: 100%; padding: 13px 40px 13px 14px;
+    font-size: 17px; /* iOS のズーム防止に 16px 以上 */
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); color: var(--text);
+    -webkit-appearance: none; appearance: none;
+  }
+  .searchbox input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .clearbtn {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    border: 0; background: var(--panel-2); color: var(--muted);
+    width: 28px; height: 28px; border-radius: 50%; font-size: 15px; cursor: pointer;
+    display: none; line-height: 1;
+  }
+  .clearbtn.on { display: block; }
+
+  .modes { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--line); background: var(--panel);
+    color: var(--muted); border-radius: 999px;
+    padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .chip.shadow[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--shadow-c) 15%, transparent);
+    color: var(--shadow-c); border-color: var(--shadow-c);
+  }
+
+  /* ---- list ---- */
+  .hint { color: var(--muted); font-size: 12px; padding: 14px 4px 6px; }
+  .list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .row {
+    width: 100%; text-align: left; font: inherit; color: inherit;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 11px 13px; cursor: pointer; box-shadow: var(--shadow);
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center;
+  }
+  .row:active { transform: scale(.995); }
+  :where(.row, .chip, .back):focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    .row:active { transform: none; }
+  }
+  .row .nm { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .row .dex { color: var(--muted); font-weight: 500; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .row .sub { grid-column: 1 / -1; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .cprange {
+    text-align: right; font-variant-numeric: tabular-nums;
+    font-weight: 800; font-size: 19px; letter-spacing: -.01em; white-space: nowrap;
+  }
+  .cprange small { display: block; font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: .04em; }
+
+  /* スクロールで自動的に追記されるが、届かない環境のために押せるようにしておく */
+  .more {
+    display: block; width: 100%; margin-top: 8px; padding: 12px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    color: var(--muted); background: transparent;
+    border: 1px dashed var(--line); border-radius: var(--radius); cursor: pointer;
+  }
+  .more:hover { color: var(--accent); border-color: var(--accent); }
+  .more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .t { font-size: 10.5px; font-weight: 700; color: #fff; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+  .badge {
+    font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 5px;
+    border: 1px solid currentColor; letter-spacing: .03em;
+  }
+  .b-leg { color: #d4a017; }
+  .b-myth { color: #db2777; }
+  .b-ub { color: #0891b2; }
+  .b-legacy { color: var(--warn); }
+
+  /* ---- detail ---- */
+  .sheet {
+    position: fixed; inset: 0; z-index: 50; background: var(--bg);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    display: none;
+  }
+  .sheet.on { display: block; }
+  .sheet .inner { max-width: 720px; margin: 0 auto; padding: 0 12px 60px; }
+  .sheet-head {
+    position: sticky; top: 0; z-index: 5;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: blur(12px);
+    padding: 10px 0; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .back {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 10px; padding: 7px 12px; font-size: 14px; cursor: pointer; font-weight: 600;
+  }
+  .sheet-head h2 { font-size: 17px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-top: 12px; box-shadow: var(--shadow);
+  }
+  .card h3 {
+    margin: 0 0 10px; font-size: 12px; color: var(--muted);
+    letter-spacing: .08em; font-weight: 700;
+  }
+  .bigcp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bigcp > div {
+    background: var(--panel-2); border-radius: 11px; padding: 10px 12px;
+  }
+  .bigcp .k { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
+  .bigcp .v { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.15; }
+  .bigcp .v small { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+  .rangeline {
+    margin-top: 10px; text-align: center; font-size: 13.5px; color: var(--muted);
+  }
+  .rangeline b { color: var(--text); font-variant-numeric: tabular-nums; font-size: 15px; }
+
+  .iv-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); font-weight: 700; margin-bottom: 4px; letter-spacing: .04em; }
+  .field input {
+    width: 100%; padding: 11px 12px; font-size: 17px; font-variant-numeric: tabular-nums;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); color: var(--text);
+    -webkit-appearance: none; appearance: none;
+  }
+  .field input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .result { margin-top: 12px; }
+  .verdict { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+  .verdict.bad { color: var(--warn); }
+  .verdict.hundo { color: var(--good); }
+  .ivgrid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ivpill {
+    font-size: 12.5px; font-variant-numeric: tabular-nums;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 9px; font-weight: 600;
+  }
+  .ivpill.top { border-color: var(--good); color: var(--good); }
+  .ivpill em { font-style: normal; color: var(--muted); font-weight: 500; margin-left: 4px; }
+
+  table.stats { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.stats td { padding: 5px 0; font-size: 13.5px; }
+  table.stats td:first-child { color: var(--muted); width: 74px; font-size: 12px; font-weight: 600; }
+  table.stats td:last-child { text-align: right; font-weight: 700; width: 52px; }
+  .bar { height: 7px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+
+  .scrollx { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cptable { width: 100%; min-width: 300px; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13.5px; }
+  .cptable th { text-align: right; font-size: 11px; color: var(--muted); font-weight: 700; padding: 4px 0; letter-spacing: .04em; }
+  .cptable th:first-child { text-align: left; }
+  .cptable td { padding: 6px 0; border-top: 1px solid var(--line); text-align: right; font-weight: 600; }
+  .cptable td:first-child { text-align: left; color: var(--muted); font-weight: 600; font-size: 12.5px; }
+
+  .moves { display: flex; flex-direction: column; gap: 6px; }
+  .move {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel-2); border-radius: 9px; padding: 7px 10px;
+  }
+  .move .mn { font-weight: 700; font-size: 13.5px; flex: 1; min-width: 0; }
+  .move .st { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sec-label { font-size: 11.5px; color: var(--muted); font-weight: 700; margin: 12px 0 6px; letter-spacing: .04em; }
+  .sec-label:first-child { margin-top: 0; }
+
+  .note { font-size: 11.5px; color: var(--muted); margin-top: 14px; line-height: 1.65; padding: 0 4px; }
+  .note code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="title">
+      <h1>レイド捕獲CP検索</h1>
+      <span>Pokémon GO</span>
+    </div>
+    <div class="searchbox">
+      <input id="q" type="search" inputmode="search" autocomplete="off" autocorrect="off"
+             autocapitalize="off" spellcheck="false"
+             placeholder="ポケモン名・図鑑番号で検索（ひらがな可）">
+      <button class="clearbtn" id="clear" aria-label="クリア">✕</button>
+    </div>
+    <div class="modes">
+      <button class="chip" id="mWeather" aria-pressed="false">☀️ 天候ブースト</button>
+      <button class="chip shadow" id="mShadow" aria-pressed="false">🟣 シャドウレイド</button>
+    </div>
+  </header>
+
+  <div class="hint" id="hint"></div>
+  <div class="list" id="list"></div>
+  <button type="button" class="more" id="more" hidden></button>
+
+  <div class="note">
+    <p><b>CP範囲について</b>：レイド報酬のポケモンは個体値が必ず 10/10/10 以上になります。通常レイドは <code>Lv20</code>、天候ブースト時は <code>Lv25</code> で出現します。シャドウレイドは個体値の下限が <code>6/6/6</code> で、レベルは通常レイドと同じです。</p>
+    <p>データ出典：pokemon-go-api（ゲーム内マスターデータ由来）／CPM表：PokeMiners game_master。CP = ⌊(攻撃+個体値) × √(防御+個体値) × √(HP+個体値) × CPM² ÷ 10⌋（最低10）。</p>
+  </div>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="inner">
+    <div class="sheet-head">
+      <button class="back" id="back">‹ 戻る</button>
+      <h2 id="dName"></h2>
+    </div>
+    <div id="dBody"></div>
+  </div>
+</div>
+
+<script id="godata" type="application/json">__DATA__</script>
+<script>
+(function () {
+  "use strict";
+
+  var D = JSON.parse(document.getElementById("godata").textContent);
+  var CPM = D.cpm;
+  var TYPES = D.types;
+  var MOVES = D.moves;          // [jpName, typeIdx, power, energy, durationMs]
+  var MONS = D.pokemon;         // [formId,jp,en,dex,atk,def,sta,t1,t2,cls,q,c,eq,ec]
+
+  var TYPE_COLOR = {
+    "ノーマル": "#9099a1", "ほのお": "#ff9d55", "みず": "#4d90d5", "でんき": "#f4d23c",
+    "くさ": "#63bc5a", "こおり": "#73cec0", "かくとう": "#ce4069", "どく": "#ab6ac8",
+    "じめん": "#d97845", "ひこう": "#8fa9de", "エスパー": "#fa7179", "むし": "#90c12c",
+    "いわ": "#c7b78b", "ゴースト": "#5269ad", "ドラゴン": "#0b6dc3", "あく": "#5a5366",
+    "はがね": "#5a8ea2", "フェアリー": "#ec8fe6"
+  };
+  var CLASS_BADGE = [null, ["伝説", "b-leg"], ["幻", "b-myth"], ["UB", "b-ub"]];
+
+  // ---- CP / HP -----------------------------------------------------------
+  function cpmOf(lv) { return CPM[lv - 1]; }
+
+  function calcCP(a, d, s, ia, id, is, lv) {
+    var m = cpmOf(lv);
+    var v = Math.floor((a + ia) * Math.sqrt(d + id) * Math.sqrt(s + is) * m * m / 10);
+    return v < 10 ? 10 : v;
+  }
+  function calcHP(s, is, lv) {
+    var v = Math.floor((s + is) * cpmOf(lv));
+    return v < 10 ? 10 : v;
+  }
+
+  // ---- 検索用の正規化（ひらがな→カタカナ、記号除去） ----------------------
+  function norm(s) {
+    return s.normalize("NFKC").toLowerCase()
+      .replace(/[ぁ-ゖ]/g, function (c) {
+        return String.fromCharCode(c.charCodeAt(0) + 0x60);
+      })
+      .replace(/[\s・'’\-.．・]/g, "");
+  }
+
+  var SEP = "\u0001"; // 名前の境目。先頭一致の判定に使う
+  var INDEX = MONS.map(function (p) {
+    return norm(p[1]) + SEP + norm(p[2]) + SEP + p[3];
+  });
+
+  // ---- state -------------------------------------------------------------
+  var state = { weather: false, shadow: false, q: "", sel: -1 };
+  var LS = "pogoRaidCP.v1";
+  try {
+    var saved = JSON.parse(localStorage.getItem(LS) || "{}");
+    state.weather = !!saved.weather;
+    state.shadow = !!saved.shadow;
+  } catch (e) { /* localStorage 不可でも動く */ }
+
+  function persist() {
+    try { localStorage.setItem(LS, JSON.stringify({ weather: state.weather, shadow: state.shadow })); }
+    catch (e) { /* noop */ }
+  }
+
+  function level() { return state.weather ? 25 : 20; }
+  function ivFloor() { return state.shadow ? 6 : 10; }
+
+  // ---- DOM ---------------------------------------------------------------
+  var $q = document.getElementById("q");
+  var $clear = document.getElementById("clear");
+  var $list = document.getElementById("list");
+  var $hint = document.getElementById("hint");
+  var $mW = document.getElementById("mWeather");
+  var $mS = document.getElementById("mShadow");
+  var $sheet = document.getElementById("sheet");
+  var $dName = document.getElementById("dName");
+  var $dBody = document.getElementById("dBody");
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function typeChip(i) {
+    if (i < 0) return "";
+    var n = TYPES[i];
+    return '<span class="t" style="background:' + (TYPE_COLOR[n] || "#888") + '">' + esc(n) + "</span>";
+  }
+
+  // ---- 一覧 --------------------------------------------------------------
+  var DEFAULT_LIST = MONS.map(function (p, i) { return i; })
+    .filter(function (i) { return MONS[i][9] === 1 || MONS[i][9] === 2 || MONS[i][9] === 3; });
+
+  function search(q) {
+    if (!q) return DEFAULT_LIST;
+    var n = norm(q);
+    var starts = [], contains = [];
+    for (var i = 0; i < INDEX.length; i++) {
+      var s = INDEX[i];
+      var at = s.indexOf(n);
+      if (at < 0) continue;
+      // 名前の先頭一致を優先
+      if (at === 0 || s.charCodeAt(at - 1) === 1) starts.push(i);
+      else contains.push(i);
+    }
+    return starts.concat(contains);
+  }
+
+  // 全件を一度に描画すると入力のたびに引っかかるので、まず1画面ぶんだけ出して
+  // 下端まで来たら足していく。件数の上限は設けない。
+  var PAGE = 60;
+  var pending = [];   // まだ描画していない検索結果
+  var $more = document.getElementById("more");
+
+  function rowHTML(i, lv, fl) {
+    var p = MONS[i];
+    var mn = calcCP(p[4], p[5], p[6], fl, fl, fl, lv);
+    var mx = calcCP(p[4], p[5], p[6], 15, 15, 15, lv);
+    var cb = CLASS_BADGE[p[9]];
+    return '<button type="button" class="row" data-i="' + i + '">' +
+      '<div class="nm">' + esc(p[1]) +
+        (cb ? ' <span class="badge ' + cb[1] + '">' + cb[0] + "</span>" : "") +
+        ' <span class="dex">No.' + p[3] + "</span></div>" +
+      '<div class="cprange">' + mn + "–" + mx + "<small>CP Lv" + lv + "</small></div>" +
+      '<div class="sub">' + typeChip(p[7]) + typeChip(p[8]) +
+        '<span class="dex">' + esc(p[2]) + "</span></div>" +
+      "</button>";
+  }
+
+  function appendChunk() {
+    if (!pending.length) return;
+    var lv = level(), fl = ivFloor();
+    var html = "";
+    var n = Math.min(PAGE, pending.length);
+    for (var k = 0; k < n; k++) html += rowHTML(pending[k], lv, fl);
+    pending = pending.slice(n);
+    $list.insertAdjacentHTML("beforeend", html);
+    $more.textContent = pending.length ? "残り " + pending.length + " 件を表示" : "";
+    $more.hidden = !pending.length;
+  }
+
+  function renderList() {
+    var hits = search(state.q);
+
+    $hint.textContent = state.q
+      ? hits.length + " 件"
+      : "伝説・幻・UB を表示中（" + DEFAULT_LIST.length + "種）。名前を入力すると全 " + MONS.length + " 種から検索します。";
+
+    $list.innerHTML = hits.length ? "" : '<div class="hint">該当なし</div>';
+    pending = hits;
+    $more.hidden = true;
+    appendChunk();
+    fillViewport();
+  }
+
+  // 追記ボタンが画面に近づいたら次のぶんを描画する（画面が縦に長い端末でも埋まる）
+  function fillViewport() {
+    if (!pending.length || $more.hidden) return;
+    if ($more.getBoundingClientRect().top < window.innerHeight + 400) {
+      appendChunk();
+      requestAnimationFrame(fillViewport);
+    }
+  }
+
+  // ---- 詳細 --------------------------------------------------------------
+  function moveRow(mi, legacy) {
+    var m = MOVES[mi];
+    var sec = (m[4] / 1000).toFixed(1);
+    return '<div class="move">' + typeChip(m[1]) +
+      '<span class="mn">' + esc(m[0]) +
+        (legacy ? ' <span class="badge b-legacy">レガシー</span>' : "") + "</span>" +
+      '<span class="st">威力' + m[2] + " / E" + (m[3] > 0 ? "+" + m[3] : m[3]) + " / " + sec + "秒</span>" +
+      "</div>";
+  }
+
+  function moveList(ids, elite) {
+    var out = "";
+    ids.forEach(function (i) { out += moveRow(i, false); });
+    elite.forEach(function (i) { out += moveRow(i, true); });
+    return out || '<div class="move"><span class="mn" style="color:var(--muted);font-weight:500">データなし</span></div>';
+  }
+
+  function statBar(label, val, max) {
+    return "<tr><td>" + label + "</td><td>" +
+      '<div class="bar"><i style="width:' + Math.round(val / max * 100) + '%"></i></div>' +
+      "</td><td>" + val + "</td></tr>";
+  }
+
+  function openDetail(i) {
+    state.sel = i;
+    var p = MONS[i];
+    var a = p[4], d = p[5], s = p[6];
+    var lv = level(), fl = ivFloor();
+    var cpMin = calcCP(a, d, s, fl, fl, fl, lv);
+    var cpMax = calcCP(a, d, s, 15, 15, 15, lv);
+    var hpMin = calcHP(s, fl, lv), hpMax = calcHP(s, 15, lv);
+    var cb = CLASS_BADGE[p[9]];
+
+    $dName.innerHTML = esc(p[1]) + ' <span class="dex" style="font-weight:500;color:var(--muted);font-size:12px">No.' + p[3] + "</span>";
+
+    var modeLabel = (state.shadow ? "シャドウレイド" : "通常レイド") + (state.weather ? "・天候ブースト" : "");
+
+    var html = "";
+
+    // 捕獲CP
+    html += '<div class="card">' +
+      "<h3>" + modeLabel + "（Lv" + lv + " / 個体値 " + fl + "以上）</h3>" +
+      '<div class="bigcp">' +
+        '<div><div class="k">最低CP（' + fl + "/" + fl + "/" + fl + ')</div><div class="v">' + cpMin + "</div></div>" +
+        '<div><div class="k">最大CP（15/15/15）</div><div class="v" style="color:var(--good)">' + cpMax + "</div></div>" +
+      "</div>" +
+      '<div class="rangeline">CP <b>' + cpMin + " – " + cpMax + "</b> ／ HP <b>" + hpMin + " – " + hpMax + "</b></div>" +
+      (cb ? '<div style="margin-top:10px;text-align:center"><span class="badge ' + cb[1] + '">' + cb[0] + "</span></div>" : "") +
+      "</div>";
+
+    // 個体値逆引き
+    html += '<div class="card">' +
+      "<h3>個体値の逆引き</h3>" +
+      '<div class="iv-inputs">' +
+        '<div class="field"><label>捕獲画面のCP</label>' +
+          '<input id="inCP" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="' + cpMin + '–' + cpMax + '"></div>' +
+        '<div class="field"><label>HP（任意・絞り込み）</label>' +
+          '<input id="inHP" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="' + hpMin + '–' + hpMax + '"></div>' +
+      "</div>" +
+      '<div class="result" id="ivResult"></div>' +
+      "</div>";
+
+    // CP早見
+    var rows = [[20, "通常レイド"], [25, "天候ブースト"], [40, "Lv40（強化上限）"], [50, "Lv50（最大強化）"]];
+    var cpt = '<table class="cptable"><tr><th>レベル</th><th>' + fl + "/" + fl + "/" + fl + "</th><th>15/15/15</th></tr>";
+    rows.forEach(function (r) {
+      cpt += "<tr><td>" + r[1] + "</td><td>" + calcCP(a, d, s, fl, fl, fl, r[0]) +
+        "</td><td>" + calcCP(a, d, s, 15, 15, 15, r[0]) + "</td></tr>";
+    });
+    cpt += "</table>";
+    html += '<div class="card"><h3>CP早見表</h3><div class="scrollx">' + cpt + "</div>" +
+      '<div class="note" style="padding:0;margin-top:10px">Lv51（バディ最高ランク）で 15/15/15：<b>' +
+      calcCP(a, d, s, 15, 15, 15, 51) + "</b> CP</div></div>";
+
+    // 種族値
+    html += '<div class="card"><h3>種族値（GO）</h3><table class="stats">' +
+      statBar("こうげき", a, 400) + statBar("ぼうぎょ", d, 400) + statBar("HP", s, 400) +
+      "</table></div>";
+
+    // 技
+    html += '<div class="card"><h3>おぼえる技</h3>' +
+      '<div class="sec-label">通常技</div><div class="moves">' + moveList(p[10], p[12]) + "</div>" +
+      '<div class="sec-label">スペシャル技</div><div class="moves">' + moveList(p[11], p[13]) + "</div>" +
+      '<div class="note" style="padding:0;margin-top:12px">「レガシー」はイベント限定・わざマシンでのみ習得できる技です（通常のわざマシンでは出ません）。</div>' +
+      "</div>";
+
+    $dBody.innerHTML = html;
+    $sheet.classList.add("on");
+    $sheet.scrollTop = 0;
+    document.body.style.overflow = "hidden";
+
+    var $cp = document.getElementById("inCP");
+    var $hp = document.getElementById("inHP");
+    var $res = document.getElementById("ivResult");
+
+    function solve() {
+      var cp = parseInt($cp.value, 10);
+      var hp = parseInt($hp.value, 10);
+      if (!cp) { $res.innerHTML = ""; return; }
+
+      if (cp < cpMin || cp > cpMax) {
+        $res.innerHTML = '<div class="verdict bad">CP ' + cp + " は " + modeLabel +
+          "（" + cpMin + "–" + cpMax + "）の範囲外です。天候ブースト／シャドウの設定を確認してください。</div>";
+        return;
+      }
+
+      var cands = [];
+      for (var ia = fl; ia <= 15; ia++) {
+        for (var id = fl; id <= 15; id++) {
+          for (var is = fl; is <= 15; is++) {
+            if (calcCP(a, d, s, ia, id, is, lv) !== cp) continue;
+            if (hp && calcHP(s, is, lv) !== hp) continue;
+            cands.push([ia, id, is]);
+          }
+        }
+      }
+
+      if (!cands.length) {
+        $res.innerHTML = '<div class="verdict bad">該当する個体値の組み合わせがありません。CP / HP の入力を確認してください。</div>';
+        return;
+      }
+
+      cands.sort(function (x, y) { return (y[0] + y[1] + y[2]) - (x[0] + x[1] + x[2]); });
+      var best = (cands[0][0] + cands[0][1] + cands[0][2]) / 45 * 100;
+      var worst = (cands[cands.length - 1].reduce(function (u, v) { return u + v; }, 0)) / 45 * 100;
+      var isHundo = cands[0][0] === 15 && cands[0][1] === 15 && cands[0][2] === 15;
+
+      var head;
+      if (cands.length === 1) {
+        head = '<div class="verdict' + (isHundo ? " hundo" : "") + '">確定：' +
+          cands[0].join("/") + "（" + best.toFixed(1) + "%）" + (isHundo ? " 🎉 100%個体！" : "") + "</div>";
+      } else {
+        head = '<div class="verdict' + (isHundo ? " hundo" : "") + '">候補 ' + cands.length + " 通り ／ 個体値 " +
+          worst.toFixed(1) + "% – " + best.toFixed(1) + "%" +
+          (isHundo ? " 🎉 100%の可能性あり" : "") + "</div>";
+      }
+
+      var pills = "";
+      var cap = 40;
+      for (var k = 0; k < cands.length && k < cap; k++) {
+        var c = cands[k];
+        var pct = (c[0] + c[1] + c[2]) / 45 * 100;
+        pills += '<span class="ivpill' + (pct === 100 ? " top" : "") + '">' + c.join("/") +
+          "<em>" + pct.toFixed(1) + "%</em></span>";
+      }
+      if (cands.length > cap) pills += '<span class="ivpill"><em>他 ' + (cands.length - cap) + " 通り</em></span>";
+
+      var tip = (!hp && cands.length > 1)
+        ? '<div class="note" style="padding:0;margin-top:10px">HP を入力するとさらに絞り込めます。</div>' : "";
+
+      $res.innerHTML = head + '<div class="ivgrid">' + pills + "</div>" + tip;
+    }
+
+    $cp.addEventListener("input", solve);
+    $hp.addEventListener("input", solve);
+  }
+
+  function closeDetail() {
+    $sheet.classList.remove("on");
+    document.body.style.overflow = "";
+    state.sel = -1;
+  }
+
+  // ---- events ------------------------------------------------------------
+  $q.addEventListener("input", function () {
+    state.q = $q.value.trim();
+    $clear.classList.toggle("on", !!state.q);
+    renderList();
+  });
+  $clear.addEventListener("click", function () {
+    $q.value = ""; state.q = ""; $clear.classList.remove("on");
+    renderList(); $q.focus();
+  });
+
+  function toggleMode(btn, key) {
+    btn.addEventListener("click", function () {
+      state[key] = !state[key];
+      btn.setAttribute("aria-pressed", String(state[key]));
+      persist();
+      renderList();
+      if (state.sel >= 0) openDetail(state.sel);
+    });
+  }
+  toggleMode($mW, "weather");
+  toggleMode($mS, "shadow");
+
+  $list.addEventListener("click", function (e) {
+    var row = e.target.closest(".row");
+    if (row) openDetail(parseInt(row.dataset.i, 10));
+  });
+  $more.addEventListener("click", function () { appendChunk(); fillViewport(); });
+  window.addEventListener("scroll", fillViewport, { passive: true });
+  document.getElementById("back").addEventListener("click", closeDetail);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && state.sel >= 0) closeDetail();
+  });
+
+  // ---- init --------------------------------------------------------------
+  $mW.setAttribute("aria-pressed", String(state.weather));
+  $mS.setAttribute("aria-pressed", String(state.shadow));
+  renderList();
+})();
+</script>
