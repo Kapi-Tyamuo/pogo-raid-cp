@@ -43,8 +43,24 @@ CPM は `game_master` の `playerLevel.cpMultiplier`（Lv20 = 0.5974、Lv25 = 0.
 
 ## スマホで使う
 
-Safari で `index.html` を開く → 共有ボタン →「ホーム画面に追加」。
-アイコンから起動でき、以降はオフラインでも動く。
+### GitHub Pages（PWA）
+
+`docs/` が Service Worker つきの PWA になっている。GitHub Pages で公開してから、
+
+1. iPhone の Safari で公開URLを開く
+2. 共有ボタン →「ホーム画面に追加」
+
+初回だけ通信して端末にキャッシュするので、以降は**圏外でもアイコンから起動できる**。
+
+公開設定は リポジトリの Settings → Pages → Source: `Deploy from a branch` → `main` / `/docs`。
+
+ビルドし直すと `sw.js` のキャッシュ名（ページ内容のSHA-256の先頭12桁）が変わり、
+次回の起動時に端末側のキャッシュが自動で入れ替わる。
+
+### ファイルを直接渡す
+
+`index.html` は外部ファイルを一切参照しない1枚もの。AirDrop でiPhoneに送って
+ファイルアプリから開けば、公開せずにオフラインで使える（ホーム画面アイコンは作れない）。
 
 ## データの更新
 
@@ -66,12 +82,21 @@ python3 build.py        # index.html / artifact.html を再ビルド
 
 ```
 pogo-raid-cp/
-├── index.html        # 生成物（配布するのはこれ）
-├── artifact.html     # 生成物
-├── build.py          # src/body.html + データ → HTML
+├── index.html        # 生成物：単体HTML（AirDrop 用）
+├── artifact.html     # 生成物：Artifact 公開用
+├── docs/             # 生成物：GitHub Pages 用の PWA 一式
+│   ├── index.html
+│   ├── manifest.webmanifest
+│   ├── sw.js         # キャッシュ名にページ内容のハッシュが入る
+│   └── icon-*.png    # src/*.svg から sips で生成
+├── build.py          # src/body.html + データ → 上記すべて
 ├── fetch_data.py     # 公開データ → src/godata.json
 ├── src/
 │   ├── body.html     # アプリ本体（HTML/CSS/JS）。__DATA__ にデータが差し込まれる
-│   └── godata.json   # 生成物（157KB）
+│   ├── icon.svg      # ホーム画面アイコン
+│   ├── icon-maskable.svg
+│   └── godata.json   # 生成物（144KB）
 └── .cache/           # ダウンロード済みの元データ（gitignore 対象）
 ```
+
+`docs/` は生成物だが、GitHub Pages が参照するのでコミットする。
