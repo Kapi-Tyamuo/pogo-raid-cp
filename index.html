@@ -61,6 +61,16 @@
     --shadow: 0 1px 2px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
   }
 
+  /* ホーム画面から起動すると viewport-fit=cover で画面いっぱいに描かれるため、
+     ステータスバーやホームインジケータの下に潜り込まないよう余白を確保する。
+     カスタムプロパティ経由にしておくと値を差し替えて検証できる。 */
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -71,7 +81,10 @@
     line-height: 1.5;
     -webkit-text-size-adjust: 100%;
   }
-  .wrap { max-width: 720px; margin: 0 auto; padding: 0 12px 96px; }
+  .wrap {
+    max-width: 720px; margin: 0 auto;
+    padding: 0 max(12px, var(--sar)) calc(96px + var(--sab)) max(12px, var(--sal));
+  }
 
   /* ---- header ---- */
   header {
@@ -79,7 +92,7 @@
     background: color-mix(in srgb, var(--bg) 88%, transparent);
     backdrop-filter: saturate(1.6) blur(12px);
     border-bottom: 1px solid var(--line);
-    padding: 10px 0 8px;
+    padding: calc(10px + var(--sat)) 0 8px;
   }
   .title { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 8px; }
   .title h1 { font-size: 16px; margin: 0; letter-spacing: .01em; }
@@ -169,17 +182,22 @@
     display: none;
   }
   .sheet.on { display: block; }
-  .sheet .inner { max-width: 720px; margin: 0 auto; padding: 0 12px 60px; }
+  .sheet .inner {
+    max-width: 720px; margin: 0 auto;
+    padding: 0 max(12px, var(--sar)) calc(60px + var(--sab)) max(12px, var(--sal));
+  }
   .sheet-head {
     position: sticky; top: 0; z-index: 5;
     background: color-mix(in srgb, var(--bg) 90%, transparent);
     backdrop-filter: blur(12px);
-    padding: 10px 0; border-bottom: 1px solid var(--line);
+    padding: calc(10px + var(--sat)) 0 10px; border-bottom: 1px solid var(--line);
     display: flex; align-items: center; gap: 10px;
   }
   .back {
     border: 1px solid var(--line); background: var(--panel); color: var(--text);
-    border-radius: 10px; padding: 7px 12px; font-size: 14px; cursor: pointer; font-weight: 600;
+    border-radius: 10px; padding: 0 14px; font-size: 14px; cursor: pointer; font-weight: 600;
+    min-height: 44px;  /* 片手で押せるよう iOS の推奨サイズを確保する */
+    display: flex; align-items: center; flex: none;
   }
   .sheet-head h2 { font-size: 17px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
