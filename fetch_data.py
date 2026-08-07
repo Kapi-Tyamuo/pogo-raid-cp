@@ -5,8 +5,15 @@
   python3 fetch_data.py --cache   # .cache/ の既存ファイルを使う
 
 出典:
-  pokedex.json ... https://pokemon-go-api.github.io/pokemon-go-api/  (種族値・技・多言語名)
+  pokedex.json ... https://pokemon-go-api.github.io/pokemon-go-api/  (種族値・技・多言語名・世代)
   game_master  ... https://github.com/PokeMiners/game_masters        (CPM表)
+
+実装済みかどうかは、ゲームマスターの pokemonSettings に 3Dモデルの設定
+(modelScaleV2) があるかで判定する。Niantic は未実装のポケモンの数値も
+先行して配信しているが、モデル設定は実際にゲームへ入るまで付かない。
+（pogoapi.net の released_pokemon.json は古く、ミミッキュやアルセウスを
+未実装としてしまうため使わない。pvpoke の released は PvP 対象かどうかの
+意味なのでこれも使えない。）
 """
 import collections, io, json, os, sys, urllib.request
 
@@ -25,13 +32,30 @@ def load(name, use_cache):
     if not (use_cache and os.path.exists(path)):
         os.makedirs(CACHE, exist_ok=True)
         print("downloading", name, "...")
-        urllib.request.urlretrieve(SOURCES[name], path)
+        # pogoapi.net は Python の既定 User-Agent を 403 で弾くので名乗っておく
+        req = urllib.request.Request(SOURCES[name], headers={"User-Agent": "pogo-raid-cp/1.0"})
+        with urllib.request.urlopen(req) as r, io.open(path, "wb") as f:
+            f.write(r.read())
     return json.load(io.open(path, encoding="utf-8"))
 
 
 use_cache = "--cache" in sys.argv
 dex = load("pokedex.json", use_cache)
 gm = load("gm.json", use_cache)
+
+# 3Dモデルの設定を持つ形態＝ゲームに入っている、とみなす。
+# ニドラン♀♂は formId が共通なので、種のid でも引けるようにしておく。
+modeled = set()
+for _e in gm:
+    _ps = _e.get("data", {}).get("pokemonSettings")
+    if _ps and _ps.get("modelScaleV2") is not None:
+        modeled.add(_ps["pokemonId"])
+        if _ps.get("form"):
+            modeled.add(_ps["form"])
+
+
+def is_released(form_id, species_id):
+    return 1 if (form_id in modeled or species_id in modeled) else 0
 
 types, type_index = [], {}
 moves, move_ids, move_index = {}, [], {}
@@ -83,6 +107,8 @@ def entry(p):
         CLASS_MAP.get(p.get("pokemonClass"), 0),
         ids("quickMoves"), ids("cinematicMoves"),
         ids("eliteQuickMoves"), ids("eliteCinematicMoves"),
+        p.get("generation") or 0,
+        is_released(p["formId"], p["id"]),
     ]
 
 
@@ -142,6 +168,8 @@ for group in bydex.values():
                 continue
             if (a[4], a[5], a[6], a[7], a[8], a[9]) != (b[4], b[5], b[6], b[7], b[8], b[9]):
                 continue
+            if a[15] and not b[15]:
+                continue  # 実装済みの基本形を、未実装のフォームのために捨てない（ウッウなど）
             if all(set(a[k]) <= set(b[k]) for k in (10, 11, 12, 13)):
                 redundant.add(a[0])
                 break

@@ -109,8 +109,36 @@
     color: var(--shadow-c); border-color: var(--shadow-c);
   }
 
+  /* ---- 表示範囲の切替（ヘッダーには置かず、スクロールで流れる位置に） ---- */
+  .browse {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 12px 2px 0;
+  }
+  .seg {
+    display: flex; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 2px;
+  }
+  .seg[hidden] { display: none; }
+  .seg-btn {
+    border: 0; background: transparent; color: var(--muted);
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 6px 13px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  }
+  .seg-btn[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+  .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
   /* ---- list ---- */
   .hint { color: var(--muted); font-size: 12px; padding: 14px 4px 6px; }
+
+  /* 地方の見出し。図鑑順に並ぶ一覧の区切りとして使う */
+  .region {
+    display: flex; align-items: baseline; gap: 8px;
+    margin: 18px 2px 2px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  .region:first-child { margin-top: 4px; }
+  .region b { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+  .region span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
   .row {
     width: 100%; text-align: left; font: inherit; color: inherit;
@@ -156,6 +184,8 @@
   .b-myth { color: #db2777; }
   .b-ub { color: #0891b2; }
   .b-legacy { color: var(--warn); }
+  .b-unreleased { color: var(--muted); }
+  .row.unreleased { opacity: .58; }
 
   /* ---- detail ---- */
   .sheet {
@@ -191,6 +221,7 @@
     margin: 0 0 10px; font-size: 12px; color: var(--muted);
     letter-spacing: .08em; font-weight: 700;
   }
+  .detail-modes { margin: 0 0 12px; }
   .bigcp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .bigcp > div {
     background: var(--panel-2); border-radius: 11px; padding: 10px 12px;
@@ -270,13 +301,22 @@
     </div>
   </header>
 
+  <div class="browse" id="browse">
+    <div class="seg" role="group" aria-label="表示するポケモンの範囲">
+      <button type="button" class="seg-btn" id="scopeRaid" aria-pressed="true">伝説・幻・UB</button>
+      <button type="button" class="seg-btn" id="scopeAll" aria-pressed="false">全ポケモン</button>
+    </div>
+    <button type="button" class="chip" id="hideUn" aria-pressed="false">未実装を隠す</button>
+  </div>
+
   <div class="hint" id="hint"></div>
   <div class="list" id="list"></div>
   <button type="button" class="more" id="more" hidden></button>
 
   <div class="note">
     <p><b>CP範囲について</b>：レイド報酬のポケモンは個体値が必ず 10/10/10 以上になります。通常レイドは <code>Lv20</code>、天候ブースト時は <code>Lv25</code> で出現します。シャドウレイドは個体値の下限が <code>6/6/6</code> で、レベルは通常レイドと同じです。</p>
-    <p>データ出典：pokemon-go-api（ゲーム内マスターデータ由来）／CPM表：PokeMiners game_master。CP = ⌊(攻撃+個体値) × √(防御+個体値) × √(HP+個体値) × CPM² ÷ 10⌋（最低10）。</p>
+    <p><b>「未実装」の判定について</b>：ゲームマスターに3Dモデルの設定があるかで判定しています。Niantic は未実装ポケモンの数値も先行して配信していますが、モデル設定は実際にゲームへ入るまで付きません。フォーム単位で見ているため、ニドラン♀♂のように形態IDが共通のものは種単位の判定になります。</p>
+    <p>データ出典：pokemon-go-api（ゲーム内マスターデータ由来）／CPM表・実装状況：PokeMiners game_master。CP = ⌊(攻撃+個体値) × √(防御+個体値) × √(HP+個体値) × CPM² ÷ 10⌋（最低10）。</p>
   </div>
 </div>
 
@@ -338,17 +378,28 @@
   });
 
   // ---- state -------------------------------------------------------------
-  var state = { weather: false, shadow: false, q: "", sel: -1 };
+  var state = {
+    weather: false, shadow: false,   // CPの計算条件
+    scopeAll: false,                 // 一覧に全ポケモンを出すか（既定は伝説・幻・UB）
+    hideUn: false,                   // 未実装を隠すか
+    q: "", sel: -1
+  };
   var LS = "pogoRaidCP.v1";
   try {
     var saved = JSON.parse(localStorage.getItem(LS) || "{}");
     state.weather = !!saved.weather;
     state.shadow = !!saved.shadow;
+    state.scopeAll = !!saved.scopeAll;
+    state.hideUn = !!saved.hideUn;
   } catch (e) { /* localStorage 不可でも動く */ }
 
   function persist() {
-    try { localStorage.setItem(LS, JSON.stringify({ weather: state.weather, shadow: state.shadow })); }
-    catch (e) { /* noop */ }
+    try {
+      localStorage.setItem(LS, JSON.stringify({
+        weather: state.weather, shadow: state.shadow,
+        scopeAll: state.scopeAll, hideUn: state.hideUn
+      }));
+    } catch (e) { /* noop */ }
   }
 
   function level() { return state.weather ? 25 : 20; }
@@ -361,6 +412,10 @@
   var $hint = document.getElementById("hint");
   var $mW = document.getElementById("mWeather");
   var $mS = document.getElementById("mShadow");
+  var $scopeRaid = document.getElementById("scopeRaid");
+  var $scopeAll = document.getElementById("scopeAll");
+  var $hideUn = document.getElementById("hideUn");
+  var $browse = document.getElementById("browse");
   var $sheet = document.getElementById("sheet");
   var $dName = document.getElementById("dName");
   var $dBody = document.getElementById("dBody");
@@ -378,14 +433,32 @@
   }
 
   // ---- 一覧 --------------------------------------------------------------
-  var DEFAULT_LIST = MONS.map(function (p, i) { return i; })
-    .filter(function (i) { return MONS[i][9] === 1 || MONS[i][9] === 2 || MONS[i][9] === 3; });
+  // 世代＝登場した地方。MONS は図鑑番号順なので、世代の変わり目が見出しになる。
+  var REGION = ["", "カントー", "ジョウト", "ホウエン", "シンオウ", "イッシュ",
+                "カロス", "アローラ", "ガラル", "パルデア"];
 
+  var RAID_LIST = [];   // 伝説・幻・UB
+  var ALL_LIST = [];
+  MONS.forEach(function (p, i) {
+    ALL_LIST.push(i);
+    if (p[9] >= 1) RAID_LIST.push(i);
+  });
+
+  function passesFilter(i) {
+    return !state.hideUn || MONS[i][15] === 1;
+  }
+
+  // 検索していないときは図鑑順のまま返す（地方見出しを付けられる）。
+  // 検索中は先頭一致を優先した順にするので、見出しは付けない。
   function search(q) {
-    if (!q) return DEFAULT_LIST;
+    var base = state.scopeAll ? ALL_LIST : RAID_LIST;
+    if (!q) return base.filter(passesFilter);
+
     var n = norm(q);
     var starts = [], contains = [];
-    for (var i = 0; i < INDEX.length; i++) {
+    for (var k = 0; k < ALL_LIST.length; k++) {
+      var i = ALL_LIST[k];
+      if (!passesFilter(i)) continue;
       var s = INDEX[i];
       var at = s.indexOf(n);
       if (at < 0) continue;
@@ -407,9 +480,11 @@
     var mn = calcCP(p[4], p[5], p[6], fl, fl, fl, lv);
     var mx = calcCP(p[4], p[5], p[6], 15, 15, 15, lv);
     var cb = CLASS_BADGE[p[9]];
-    return '<button type="button" class="row" data-i="' + i + '">' +
+    var un = p[15] !== 1;
+    return '<button type="button" class="row' + (un ? " unreleased" : "") + '" data-i="' + i + '">' +
       '<div class="nm">' + esc(p[1]) +
         (cb ? ' <span class="badge ' + cb[1] + '">' + cb[0] + "</span>" : "") +
+        (un ? ' <span class="badge b-unreleased">未実装</span>' : "") +
         ' <span class="dex">No.' + p[3] + "</span></div>" +
       '<div class="cprange">' + mn + "–" + mx + "<small>CP Lv" + lv + "</small></div>" +
       '<div class="sub">' + typeChip(p[7]) + typeChip(p[8]) +
@@ -417,12 +492,28 @@
       "</button>";
   }
 
+  var lastGen = -1;      // 追記描画をまたいでも見出しが重複しないよう覚えておく
+  var showRegions = true;
+  var genCount = {};     // 地方ごとの件数（見出しに出す）
+
+  function regionHTML(gen, count) {
+    return '<div class="region"><b>' + (REGION[gen] || "その他") + "地方</b>" +
+      "<span>第" + gen + "世代 ・ " + count + "件</span></div>";
+  }
+
   function appendChunk() {
     if (!pending.length) return;
     var lv = level(), fl = ivFloor();
     var html = "";
     var n = Math.min(PAGE, pending.length);
-    for (var k = 0; k < n; k++) html += rowHTML(pending[k], lv, fl);
+    for (var k = 0; k < n; k++) {
+      var i = pending[k];
+      if (showRegions && MONS[i][14] !== lastGen) {
+        lastGen = MONS[i][14];
+        html += regionHTML(lastGen, genCount[lastGen] || 0);
+      }
+      html += rowHTML(i, lv, fl);
+    }
     pending = pending.slice(n);
     $list.insertAdjacentHTML("beforeend", html);
     $more.textContent = pending.length ? "残り " + pending.length + " 件を表示" : "";
@@ -431,10 +522,26 @@
 
   function renderList() {
     var hits = search(state.q);
+    showRegions = !state.q;
+    lastGen = -1;
 
+    // 検索中は全種が対象なので、範囲の切替は効かない。出しっぱなしだと
+    // 押しても何も起きないボタンになるので隠す。
+    $scopeRaid.parentNode.hidden = !!state.q;
+
+    genCount = {};
+    if (showRegions) {
+      hits.forEach(function (i) {
+        var g = MONS[i][14];
+        genCount[g] = (genCount[g] || 0) + 1;
+      });
+    }
+
+    var scopeName = state.scopeAll ? "全ポケモン" : "伝説・幻・UB";
     $hint.textContent = state.q
       ? hits.length + " 件"
-      : "伝説・幻・UB を表示中（" + DEFAULT_LIST.length + "種）。名前を入力すると全 " + MONS.length + " 種から検索します。";
+      : scopeName + " " + hits.length + " 件を地方順に表示中" +
+        (state.hideUn ? "（未実装を除く）" : "") + "。名前を入力すると全 " + MONS.length + " 種から検索します。";
 
     $list.innerHTML = hits.length ? "" : '<div class="hint">該当なし</div>';
     pending = hits;
@@ -476,7 +583,11 @@
       "</td><td>" + val + "</td></tr>";
   }
 
-  function openDetail(i) {
+  // keep=true は同じポケモンを条件だけ変えて描き直すとき。
+  // 入力済みのCP/HPとスクロール位置を保つ。
+  function openDetail(i, keep) {
+    if (!keep) { state.cpIn = ""; state.hpIn = ""; }
+    var prevScroll = keep ? $sheet.scrollTop : 0;
     state.sel = i;
     var p = MONS[i];
     var a = p[4], d = p[5], s = p[6];
@@ -492,9 +603,13 @@
 
     var html = "";
 
-    // 捕獲CP
+    // 捕獲CP。条件を詰めるのはこの画面なので、一覧に戻らず切り替えられるようにする
     html += '<div class="card">' +
       "<h3>" + modeLabel + "（Lv" + lv + " / 個体値 " + fl + "以上）</h3>" +
+      '<div class="modes detail-modes">' +
+        '<button type="button" class="chip" id="dWeather" aria-pressed="' + state.weather + '">☀️ 天候ブースト</button>' +
+        '<button type="button" class="chip shadow" id="dShadow" aria-pressed="' + state.shadow + '">🟣 シャドウレイド</button>' +
+      "</div>" +
       '<div class="bigcp">' +
         '<div><div class="k">最低CP（' + fl + "/" + fl + "/" + fl + ')</div><div class="v">' + cpMin + "</div></div>" +
         '<div><div class="k">最大CP（15/15/15）</div><div class="v" style="color:var(--good)">' + cpMax + "</div></div>" +
@@ -541,14 +656,18 @@
 
     $dBody.innerHTML = html;
     $sheet.classList.add("on");
-    $sheet.scrollTop = 0;
     document.body.style.overflow = "hidden";
+
+    document.getElementById("dWeather").addEventListener("click", function () { setMode("weather"); });
+    document.getElementById("dShadow").addEventListener("click", function () { setMode("shadow"); });
 
     var $cp = document.getElementById("inCP");
     var $hp = document.getElementById("inHP");
     var $res = document.getElementById("ivResult");
 
     function solve() {
+      state.cpIn = $cp.value;
+      state.hpIn = $hp.value;
       var cp = parseInt($cp.value, 10);
       var hp = parseInt($hp.value, 10);
       if (!cp) { $res.innerHTML = ""; return; }
@@ -608,6 +727,12 @@
 
     $cp.addEventListener("input", solve);
     $hp.addEventListener("input", solve);
+
+    // 条件を切り替えて描き直したときは、入力と見ていた位置を戻す
+    $cp.value = state.cpIn || "";
+    $hp.value = state.hpIn || "";
+    if ($cp.value) solve();
+    $sheet.scrollTop = prevScroll;
   }
 
   function closeDetail() {
@@ -627,17 +752,44 @@
     renderList(); $q.focus();
   });
 
-  function toggleMode(btn, key) {
-    btn.addEventListener("click", function () {
-      state[key] = !state[key];
-      btn.setAttribute("aria-pressed", String(state[key]));
-      persist();
-      renderList();
-      if (state.sel >= 0) openDetail(state.sel);
-    });
+  // 天候ブースト／シャドウは一覧と詳細の両方から切り替えられるので、
+  // 状態を1か所で持って、表示中のボタンをまとめて合わせる。
+  function syncChips() {
+    $mW.setAttribute("aria-pressed", String(state.weather));
+    $mS.setAttribute("aria-pressed", String(state.shadow));
+    $scopeRaid.setAttribute("aria-pressed", String(!state.scopeAll));
+    $scopeAll.setAttribute("aria-pressed", String(state.scopeAll));
+    $hideUn.setAttribute("aria-pressed", String(state.hideUn));
   }
-  toggleMode($mW, "weather");
-  toggleMode($mS, "shadow");
+
+  function setMode(key) {
+    state[key] = !state[key];
+    persist();
+    syncChips();
+    renderList();
+    if (state.sel >= 0) openDetail(state.sel, true);
+  }
+
+  $mW.addEventListener("click", function () { setMode("weather"); });
+  $mS.addEventListener("click", function () { setMode("shadow"); });
+
+  function setScope(all) {
+    if (state.scopeAll === all) return;
+    state.scopeAll = all;
+    persist();
+    syncChips();
+    renderList();
+    window.scrollTo(0, 0);
+  }
+  $scopeRaid.addEventListener("click", function () { setScope(false); });
+  $scopeAll.addEventListener("click", function () { setScope(true); });
+
+  $hideUn.addEventListener("click", function () {
+    state.hideUn = !state.hideUn;
+    persist();
+    syncChips();
+    renderList();
+  });
 
   $list.addEventListener("click", function (e) {
     var row = e.target.closest(".row");
@@ -651,8 +803,7 @@
   });
 
   // ---- init --------------------------------------------------------------
-  $mW.setAttribute("aria-pressed", String(state.weather));
-  $mS.setAttribute("aria-pressed", String(state.shadow));
+  syncChips();
   renderList();
 })();
 </script>
