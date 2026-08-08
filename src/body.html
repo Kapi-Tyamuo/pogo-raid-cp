@@ -221,6 +221,26 @@
     margin: 0 0 10px; font-size: 12px; color: var(--muted);
     letter-spacing: .08em; font-weight: 700;
   }
+  /* 複数フォルムの切替タブ。ビビヨンの20形態でも収まるよう横スクロールさせる */
+  .formtabs {
+    display: flex; gap: 6px; margin: 12px 0 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: 0 2px 4px;
+    scrollbar-width: none;
+  }
+  .formtabs::-webkit-scrollbar { display: none; }
+  .formtab {
+    flex: none; font: inherit; font-size: 12.5px; font-weight: 600;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+    border-radius: 999px; padding: 7px 13px; cursor: pointer; white-space: nowrap;
+  }
+  .formtab[aria-selected="true"] {
+    background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+  }
+  .formtab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .formtab em { font-style: normal; opacity: .65; margin-left: 4px; font-size: 10px; }
+
+  .b-forms { color: var(--accent); }
   .detail-modes { margin: 0 0 12px; }
   .bigcp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .bigcp > div {
@@ -315,6 +335,7 @@
 
   <div class="note">
     <p><b>CP範囲について</b>：レイド報酬のポケモンは個体値が必ず 10/10/10 以上になります。通常レイドは <code>Lv20</code>、天候ブースト時は <code>Lv25</code> で出現します。シャドウレイドは個体値の下限が <code>6/6/6</code> で、レベルは通常レイドと同じです。</p>
+    <p><b>フォルムの扱い</b>：アルセウスのプレートやデオキシスのフォルムなど、同じ図鑑番号のポケモンは一覧では1行にまとめ、詳細画面のタブで切り替えます。一覧に出るCPは代表フォルムのものです。フォルムによってCPが変わるポケモン（デオキシス、ムゲンダイナ、ザシアンなど）は、詳細画面でタブを切り替えて確認してください。名前で検索したときは、一致したフォルムがそのまま並びます（「ガラル」で引けばガラルのすがたが出ます）。</p>
     <p><b>「未実装」の判定について</b>：ゲームマスターに3Dモデルの設定があるかで判定しています。Niantic は未実装ポケモンの数値も先行して配信していますが、モデル設定は実際にゲームへ入るまで付きません。フォーム単位で見ているため、ニドラン♀♂のように形態IDが共通のものは種単位の判定になります。</p>
     <p>データ出典：pokemon-go-api（ゲーム内マスターデータ由来）／CPM表・実装状況：PokeMiners game_master。CP = ⌊(攻撃+個体値) × √(防御+個体値) × √(HP+個体値) × CPM² ÷ 10⌋（最低10）。</p>
   </div>
@@ -448,23 +469,85 @@
     return !state.hideUn || MONS[i][15] === 1;
   }
 
+  // ---- フォルムのまとめ --------------------------------------------------
+  // アルセウス18種やビビヨン20種が一覧を埋めてしまうので、図鑑番号ごとに
+  // 1行だけ出して、詳細画面のタブで切り替える。GO の図鑑と同じ考え方。
+  var REGIONAL = /アローラ|ガラル|ヒスイ|パルデア/;
+
+  function formLabel(name) {
+    var m = /^.+? \((.+)\)$/.exec(name);
+    return m ? m[1] : null;
+  }
+  function baseName(name) {
+    var m = /^(.+?) \(/.exec(name);
+    return m ? m[1] : name;
+  }
+
+  var FORMS = {};        // 図鑑番号 -> その番号のエントリ添字（図鑑順）
+  MONS.forEach(function (p, i) {
+    (FORMS[p[3]] = FORMS[p[3]] || []).push(i);
+  });
+
+  // 代表フォルム：括弧なしの名前を優先し、次にリージョンフォームでないもの。
+  // ヒヒダルマは括弧なしが無いので「ノーマルモード」が代表になる。
+  var DEFAULT_FORM = {};
+  Object.keys(FORMS).forEach(function (dexNr) {
+    var list = FORMS[dexNr];
+    var pick = null;
+    for (var k = 0; k < list.length && !pick; k++) {
+      if (!formLabel(MONS[list[k]][1])) pick = list[k];
+    }
+    for (var k2 = 0; k2 < list.length && !pick; k2++) {
+      if (!REGIONAL.test(MONS[list[k2]][1])) pick = list[k2];
+    }
+    DEFAULT_FORM[dexNr] = pick === null ? list[0] : pick;
+  });
+
+  // 1行ぶんの情報。i=表示するエントリ、n=同じ図鑑番号で表示対象の数、
+  // base=種の名前（括弧を外したもの）で出すか
+  function rowOf(i, n, base) {
+    return { i: i, n: n, base: base };
+  }
+
   // 検索していないときは図鑑順のまま返す（地方見出しを付けられる）。
   // 検索中は先頭一致を優先した順にするので、見出しは付けない。
   function search(q) {
-    var base = state.scopeAll ? ALL_LIST : RAID_LIST;
-    if (!q) return base.filter(passesFilter);
+    if (!q) {
+      var base = state.scopeAll ? ALL_LIST : RAID_LIST;
+      var visible = {};   // 図鑑番号 -> 表示対象のエントリ
+      base.forEach(function (i) {
+        if (!passesFilter(i)) return;
+        (visible[MONS[i][3]] = visible[MONS[i][3]] || []).push(i);
+      });
+      var rows = [];
+      Object.keys(visible).forEach(function (dexNr) {
+        var list = visible[dexNr];
+        var def = DEFAULT_FORM[dexNr];
+        // 代表が絞り込みで消えていたら、残っている先頭を使う
+        var pick = list.indexOf(def) >= 0 ? def : list[0];
+        rows.push(rowOf(pick, FORMS[dexNr].length, FORMS[dexNr].length > 1));
+      });
+      rows.sort(function (x, y) { return MONS[x.i][3] - MONS[y.i][3]; });
+      return rows;
+    }
 
+    // 検索中は一致したフォルムそのものを出す（「ガラル」で引いたら
+    // ガラルのすがたが並ぶ）。同じ図鑑番号は最初の一致だけ残す。
     var n = norm(q);
-    var starts = [], contains = [];
+    var starts = [], contains = [], taken = {};
     for (var k = 0; k < ALL_LIST.length; k++) {
       var i = ALL_LIST[k];
       if (!passesFilter(i)) continue;
       var s = INDEX[i];
       var at = s.indexOf(n);
       if (at < 0) continue;
+      var dexNr = MONS[i][3];
+      if (taken[dexNr]) continue;
+      taken[dexNr] = true;
       // 名前の先頭一致を優先
-      if (at === 0 || s.charCodeAt(at - 1) === 1) starts.push(i);
-      else contains.push(i);
+      var total = FORMS[dexNr].length;
+      if (at === 0 || s.charCodeAt(at - 1) === 1) starts.push(rowOf(i, total, false));
+      else contains.push(rowOf(i, total, false));
     }
     return starts.concat(contains);
   }
@@ -475,16 +558,20 @@
   var pending = [];   // まだ描画していない検索結果
   var $more = document.getElementById("more");
 
-  function rowHTML(i, lv, fl) {
-    var p = MONS[i];
+  function rowHTML(d, lv, fl) {
+    var i = d.i, p = MONS[i];
     var mn = calcCP(p[4], p[5], p[6], fl, fl, fl, lv);
     var mx = calcCP(p[4], p[5], p[6], 15, 15, 15, lv);
     var cb = CLASS_BADGE[p[9]];
     var un = p[15] !== 1;
+    // 形態が複数あるときは種の名前で出し、CP は代表フォルムのもの。
+    // 形態でCPが変わることがあるので、バッジで詳細を見るよう促す。
+    var name = d.base ? baseName(p[1]) : p[1];
     return '<button type="button" class="row' + (un ? " unreleased" : "") + '" data-i="' + i + '">' +
-      '<div class="nm">' + esc(p[1]) +
+      '<div class="nm">' + esc(name) +
         (cb ? ' <span class="badge ' + cb[1] + '">' + cb[0] + "</span>" : "") +
         (un ? ' <span class="badge b-unreleased">未実装</span>' : "") +
+        (d.n > 1 ? ' <span class="badge b-forms">' + d.n + "形態</span>" : "") +
         ' <span class="dex">No.' + p[3] + "</span></div>" +
       '<div class="cprange">' + mn + "–" + mx + "<small>CP Lv" + lv + "</small></div>" +
       '<div class="sub">' + typeChip(p[7]) + typeChip(p[8]) +
@@ -507,12 +594,12 @@
     var html = "";
     var n = Math.min(PAGE, pending.length);
     for (var k = 0; k < n; k++) {
-      var i = pending[k];
-      if (showRegions && MONS[i][14] !== lastGen) {
-        lastGen = MONS[i][14];
+      var d = pending[k];
+      if (showRegions && MONS[d.i][14] !== lastGen) {
+        lastGen = MONS[d.i][14];
         html += regionHTML(lastGen, genCount[lastGen] || 0);
       }
-      html += rowHTML(i, lv, fl);
+      html += rowHTML(d, lv, fl);
     }
     pending = pending.slice(n);
     $list.insertAdjacentHTML("beforeend", html);
@@ -531,8 +618,8 @@
 
     genCount = {};
     if (showRegions) {
-      hits.forEach(function (i) {
-        var g = MONS[i][14];
+      hits.forEach(function (d) {
+        var g = MONS[d.i][14];
         genCount[g] = (genCount[g] || 0) + 1;
       });
     }
@@ -597,11 +684,26 @@
     var hpMin = calcHP(s, fl, lv), hpMax = calcHP(s, 15, lv);
     var cb = CLASS_BADGE[p[9]];
 
-    $dName.innerHTML = esc(p[1]) + ' <span class="dex" style="font-weight:500;color:var(--muted);font-size:12px">No.' + p[3] + "</span>";
+    // 同じ図鑑番号の他フォルムに切り替えるタブ。絞り込みで隠していても、
+    // ここでは全フォルムを出して未実装を注記する。
+    var siblings = FORMS[p[3]] || [i];
+
+    // タブがあるならフォルム名はタブ側で分かるので、見出しは種名だけにする
+    // （そのままだと「デオキシス (ノーマルフォルム)」が幅に収まらない）
+    $dName.innerHTML = esc(siblings.length > 1 ? baseName(p[1]) : p[1]) +
+      ' <span class="dex" style="font-weight:500;color:var(--muted);font-size:12px">No.' + p[3] + "</span>";
 
     var modeLabel = (state.shadow ? "シャドウレイド" : "通常レイド") + (state.weather ? "・天候ブースト" : "");
-
     var html = "";
+    if (siblings.length > 1) {
+      html += '<div class="formtabs" role="tablist" aria-label="フォルムの切替">';
+      siblings.forEach(function (j) {
+        html += '<button type="button" class="formtab" role="tab" data-form="' + j + '"' +
+          ' aria-selected="' + (j === i) + '">' + esc(formLabel(MONS[j][1]) || "基本") +
+          (MONS[j][15] !== 1 ? "<em>未実装</em>" : "") + "</button>";
+      });
+      html += "</div>";
+    }
 
     // 捕獲CP。条件を詰めるのはこの画面なので、一覧に戻らず切り替えられるようにする
     html += '<div class="card">' +
@@ -660,6 +762,18 @@
 
     document.getElementById("dWeather").addEventListener("click", function () { setMode("weather"); });
     document.getElementById("dShadow").addEventListener("click", function () { setMode("shadow"); });
+
+    Array.prototype.forEach.call($dBody.querySelectorAll(".formtab"), function (b) {
+      b.addEventListener("click", function () {
+        openDetail(parseInt(b.dataset.form, 10), true);
+      });
+    });
+    // 選択中のタブが横スクロールの外にあると見えないので寄せる
+    var active = $dBody.querySelector('.formtab[aria-selected="true"]');
+    if (active) {
+      var strip = active.parentNode;
+      strip.scrollLeft = Math.max(0, active.offsetLeft - 12);
+    }
 
     var $cp = document.getElementById("inCP");
     var $hp = document.getElementById("inHP");

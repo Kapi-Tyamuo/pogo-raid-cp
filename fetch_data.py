@@ -130,6 +130,19 @@ NAME_OVERRIDE = {"MINIOR": "メテノ (りゅうせいのすがた)"}
 for c in ["RED", "ORANGE", "YELLOW", "GREEN", "BLUE", "INDIGO", "VIOLET"]:
     NAME_OVERRIDE["MINIOR_" + c] = "メテノ (コアのすがた)"
 
+# 元データは基本フォルムだけ素の名前にしている。他のフォルムと並ぶと
+# 詳細画面のタブが「基本」になってしまうので、実際の呼び名を入れておく。
+# ヒスイ・ガラルなどは「基本」で意味が通るのでそのままにする。
+NAME_OVERRIDE.update({
+    "DEOXYS": "デオキシス (ノーマルフォルム)",
+    "ARCEUS": "アルセウス (ノーマルタイプ)",
+    "SILVALLY": "シルヴァディ (タイプ：ノーマル)",
+    "ROTOM": "ロトム (ノーマルロトム)",
+    "CASTFORM": "ポワルン (ノーマルのすがた)",
+    "MEOWSTIC": "ニャオニクス (オス)",
+    "OINKOLOGNE": "パフュートン (オスのすがた)",
+})
+
 for e in pokemon:
     if e[0] in NAME_OVERRIDE:
         e[1] = NAME_OVERRIDE[e[0]]
