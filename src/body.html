@@ -474,13 +474,34 @@
   // 1行だけ出して、詳細画面のタブで切り替える。GO の図鑑と同じ考え方。
   var REGIONAL = /アローラ|ガラル|ヒスイ|パルデア/;
 
+  // 元データはフォルム名を2通りで表す。括弧付き（「デオキシス (アタックフォルム)」）と、
+  // アローラ・ガラルだけ接頭辞（「ガラル フリーザー」）。どちらもラベルとして扱う。
+  var REGION_PREFIX = [
+    ["アローラ ", "アローラのすがた"],
+    ["ガラル ", "ガラルのすがた"],
+    ["ヒスイ ", "ヒスイのすがた"],
+    ["パルデア ", "パルデアのすがた"]
+  ];
+
+  function regionPrefixOf(name) {
+    for (var k = 0; k < REGION_PREFIX.length; k++) {
+      if (name.lastIndexOf(REGION_PREFIX[k][0], 0) === 0) return REGION_PREFIX[k];
+    }
+    return null;
+  }
+
   function formLabel(name) {
     var m = /^.+? \((.+)\)$/.exec(name);
-    return m ? m[1] : null;
+    if (m) return m[1];
+    var pre = regionPrefixOf(name);
+    return pre ? pre[1] : null;
   }
+
   function baseName(name) {
     var m = /^(.+?) \(/.exec(name);
-    return m ? m[1] : name;
+    if (m) return m[1];
+    var pre = regionPrefixOf(name);
+    return pre ? name.slice(pre[0].length) : name;
   }
 
   var FORMS = {};        // 図鑑番号 -> その番号のエントリ添字（図鑑順）
