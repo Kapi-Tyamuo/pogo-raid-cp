@@ -478,9 +478,28 @@
   }
 
   // ---- 一覧 --------------------------------------------------------------
-  // 世代＝登場した地方。MONS は図鑑番号順なので、世代の変わり目が見出しになる。
-  var REGION = ["", "カントー", "ジョウト", "ホウエン", "シンオウ", "イッシュ",
-                "カロス", "アローラ", "ガラル", "パルデア"];
+  // 地方は図鑑番号の範囲で決める。元データの世代は、ヒスイの7種
+  // （アヤシシ〜ラブトロス No.899–905）を第9世代＝パルデア扱いにしてしまうため使わない。
+  // MONS は図鑑番号順なので、範囲の変わり目がそのまま見出しになる。
+  var REGIONS = [
+    [1, 151, "カントー"],
+    [152, 251, "ジョウト"],
+    [252, 386, "ホウエン"],
+    [387, 493, "シンオウ"],
+    [494, 649, "イッシュ"],
+    [650, 721, "カロス"],
+    [722, 809, "アローラ"],
+    [810, 898, "ガラル"],
+    [899, 905, "ヒスイ"],
+    [906, 1025, "パルデア"]
+  ];
+
+  function regionOf(dexNr) {
+    for (var i = 0; i < REGIONS.length; i++) {
+      if (dexNr >= REGIONS[i][0] && dexNr <= REGIONS[i][1]) return i;
+    }
+    return REGIONS.length - 1;   // 図鑑が増えたぶんは最後の地方に寄せる
+  }
 
   var RAID_LIST = [];   // 伝説・幻・UB
   var ALL_LIST = [];
@@ -624,13 +643,14 @@
       "</button>";
   }
 
-  var lastGen = -1;      // 追記描画をまたいでも見出しが重複しないよう覚えておく
+  var lastRegion = -1;   // 追記描画をまたいでも見出しが重複しないよう覚えておく
   var showRegions = true;
-  var genCount = {};     // 地方ごとの件数（見出しに出す）
+  var regionCount = {};  // 地方ごとの件数（見出しに出す）
 
-  function regionHTML(gen, count) {
-    return '<div class="region"><b>' + (REGION[gen] || "その他") + "地方</b>" +
-      "<span>第" + gen + "世代 ・ " + count + "件</span></div>";
+  function regionHTML(idx, count) {
+    var r = REGIONS[idx];
+    return '<div class="region"><b>' + r[2] + "地方</b>" +
+      "<span>No." + r[0] + "–" + r[1] + " ・ " + count + "件</span></div>";
   }
 
   var section = null;   // いま行を追加している地方の入れ物
@@ -649,12 +669,13 @@
 
     for (var k = 0; k < n; k++) {
       var d = pending[k];
-      if (showRegions && MONS[d.i][14] !== lastGen) {
+      var reg = regionOf(MONS[d.i][3]);
+      if (showRegions && reg !== lastRegion) {
         flush();   // 前の地方のぶんを先に書き出す
-        lastGen = MONS[d.i][14];
+        lastRegion = reg;
         section = document.createElement("section");
         section.className = "rgroup";
-        section.innerHTML = regionHTML(lastGen, genCount[lastGen] || 0);
+        section.innerHTML = regionHTML(reg, regionCount[reg] || 0);
         $list.appendChild(section);
       }
       html += rowHTML(d, lv, fl);
@@ -669,17 +690,17 @@
   function renderList() {
     var hits = search(state.q);
     showRegions = !state.q;
-    lastGen = -1;
+    lastRegion = -1;
 
     // 検索中は全種が対象なので、範囲の切替は効かない。出しっぱなしだと
     // 押しても何も起きないボタンになるので隠す。
     $scopeRaid.parentNode.hidden = !!state.q;
 
-    genCount = {};
+    regionCount = {};
     if (showRegions) {
       hits.forEach(function (d) {
-        var g = MONS[d.i][14];
-        genCount[g] = (genCount[g] || 0) + 1;
+        var r = regionOf(MONS[d.i][3]);
+        regionCount[r] = (regionCount[r] || 0) + 1;
       });
     }
 
