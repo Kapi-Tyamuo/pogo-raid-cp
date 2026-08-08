@@ -1,0 +1,28 @@
+{
+  "name": "pogo-raid-cp",
+  "version": "1.0.0",
+  "description": "レイドで倒したポケモンの**捕獲画面CPの範囲**を、その場ですぐ引くための単体HTMLアプリ。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sknono/pogo-raid-cp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/sknono/pogo-raid-cp/issues"
+  },
+  "homepage": "https://github.com/sknono/pogo-raid-cp#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}
