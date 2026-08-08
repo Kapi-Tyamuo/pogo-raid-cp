@@ -148,13 +148,17 @@
   /* ---- list ---- */
   .hint { color: var(--muted); font-size: 12px; padding: 14px 4px 6px; }
 
-  /* 地方の見出し。図鑑順に並ぶ一覧の区切りとして使う */
+  /* 地方の見出し。スクロール中も今どこを見ているか分かるよう固定する。
+     地方ごとに入れ物（.rgroup）を作り、その中で sticky させることで、
+     次の地方の見出しが前の見出しを押し上げていく。 */
+  .rgroup { display: flex; flex-direction: column; gap: 8px; }
   .region {
+    position: sticky; top: var(--headerH, 130px); z-index: 10;
     display: flex; align-items: baseline; gap: 8px;
-    margin: 18px 2px 2px; padding-bottom: 6px;
+    padding: 8px 2px 7px;
+    background: var(--bg);
     border-bottom: 1px solid var(--line);
   }
-  .region:first-child { margin-top: 4px; }
   .region b { font-size: 14px; font-weight: 700; letter-spacing: .02em; }
   .region span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
@@ -629,21 +633,35 @@
       "<span>第" + gen + "世代 ・ " + count + "件</span></div>";
   }
 
+  var section = null;   // いま行を追加している地方の入れ物
+
   function appendChunk() {
     if (!pending.length) return;
     var lv = level(), fl = ivFloor();
-    var html = "";
     var n = Math.min(PAGE, pending.length);
+    var html = "";
+
+    function flush() {
+      if (!html) return;
+      (section || $list).insertAdjacentHTML("beforeend", html);
+      html = "";
+    }
+
     for (var k = 0; k < n; k++) {
       var d = pending[k];
       if (showRegions && MONS[d.i][14] !== lastGen) {
+        flush();   // 前の地方のぶんを先に書き出す
         lastGen = MONS[d.i][14];
-        html += regionHTML(lastGen, genCount[lastGen] || 0);
+        section = document.createElement("section");
+        section.className = "rgroup";
+        section.innerHTML = regionHTML(lastGen, genCount[lastGen] || 0);
+        $list.appendChild(section);
       }
       html += rowHTML(d, lv, fl);
     }
+    flush();
+
     pending = pending.slice(n);
-    $list.insertAdjacentHTML("beforeend", html);
     $more.textContent = pending.length ? "残り " + pending.length + " 件を表示" : "";
     $more.hidden = !pending.length;
   }
@@ -672,10 +690,19 @@
         (state.hideUn ? "（未実装を除く）" : "") + "。名前を入力すると全 " + MONS.length + " 種から検索します。";
 
     $list.innerHTML = hits.length ? "" : '<div class="hint">該当なし</div>';
+    section = null;
     pending = hits;
     $more.hidden = true;
+    measureHeader();
     appendChunk();
     fillViewport();
+  }
+
+  // 地方の見出しはヘッダーの真下で止めたいので、その高さを CSS に渡す。
+  // チップの折り返しや画面幅で変わるため、描画のたびに測り直す。
+  function measureHeader() {
+    var h = document.querySelector("header").getBoundingClientRect().height;
+    document.documentElement.style.setProperty("--headerH", Math.round(h) + "px");
   }
 
   // 追記ボタンが画面に近づいたら次のぶんを描画する（画面が縦に長い端末でも埋まる）
@@ -952,6 +979,8 @@
   });
   $more.addEventListener("click", function () { appendChunk(); fillViewport(); });
   window.addEventListener("scroll", fillViewport, { passive: true });
+  window.addEventListener("resize", measureHeader);
+  window.addEventListener("orientationchange", measureHeader);
   document.getElementById("back").addEventListener("click", closeDetail);
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && state.sel >= 0) closeDetail();
