@@ -112,12 +112,21 @@ def entry(p):
     ]
 
 
+# 素の ZACIAN / ZAMAZENTA は「れきせんのゆうしゃ」の種族値・技に「けんのおう／
+# たてのおう」のタイプが付いたテンプレート行で、ゲームには存在しない姿。
+# 残すとタブが「基本」と「れきせんのゆうしゃ」に分かれてしまうので落とす。
+DROP_FORMS = {"ZACIAN", "ZAMAZENTA"}
+
+# レイドで捕まえるのはこの姿なので、一覧の代表とタブの先頭に置く
+# （名前に括弧が付いているため、そのままだと五十音順で「けんのおう」が先になる）。
+PREFERRED_FIRST = {"ZACIAN_HERO", "ZAMAZENTA_HERO"}
+
 pokemon, seen = [], set()
 species_of = {}   # formId -> 種のid（DARMANITAN_GALARIAN_ZEN -> DARMANITAN）
 for p in dex:
     for cand in [p] + list((p.get("regionForms") or {}).values()):
         e = entry(cand)
-        if e and e[0] not in seen:
+        if e and e[0] not in seen and e[0] not in DROP_FORMS:
             seen.add(e[0])
             species_of[e[0]] = cand["id"]
             pokemon.append(e)
@@ -233,7 +242,7 @@ dupe = [k for k, v in collections.Counter((e[1], e[3]) for e in pokemon).items()
 if dupe:
     sys.exit("同名のエントリが残っています: %r" % dupe)
 
-pokemon.sort(key=lambda e: (e[3], e[0]))
+pokemon.sort(key=lambda e: (e[3], 0 if e[0] in PREFERRED_FIRST else 1, e[0]))
 
 cpm = None
 for e in gm:
