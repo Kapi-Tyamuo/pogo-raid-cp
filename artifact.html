@@ -110,6 +110,23 @@
     color: var(--shadow-c); border-color: var(--shadow-c);
   }
 
+  /* ---- 引っぱって更新 ---- */
+  .ptr {
+    position: fixed; left: 0; right: 0; top: calc(var(--sat) + 4px);
+    z-index: 60; display: none; justify-content: center;
+    pointer-events: none; opacity: 0;
+  }
+  .ptr.show { display: flex; }
+  .ptr span {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+    padding: 7px 16px; font-size: 12.5px; font-weight: 700; color: var(--muted);
+    box-shadow: var(--shadow); white-space: nowrap;
+  }
+  .ptr.ready span { color: var(--accent); border-color: var(--accent); }
+  /* 指を離したあと元に戻るときだけアニメーションさせる（引っぱり中は遅延になる） */
+  .ptr-settle { transition: transform .22s ease; }
+  @media (prefers-reduced-motion: reduce) { .ptr-settle { transition: none; } }
+
   /* ---- 表示範囲の切替（ヘッダーには置かず、スクロールで流れる位置に） ---- */
   .browse {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
@@ -303,6 +320,8 @@
   .note { font-size: 11.5px; color: var(--muted); margin-top: 14px; line-height: 1.65; padding: 0 4px; }
   .note code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
 </style>
+
+<div class="ptr" id="ptr" role="status" aria-live="polite"><span id="ptrText"></span></div>
 
 <div class="wrap">
   <header>
@@ -937,6 +956,131 @@
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && state.sel >= 0) closeDetail();
   });
+
+  // ---- 引っぱって更新 ------------------------------------------------------
+  // ホーム画面から起動した PWA には Safari の更新機能が無く、キャッシュ優先で
+  // 動くので、起動し直さないと新しい版に気づけない。自前で用意する。
+  // タッチ環境の判定は端末によって当てにならないので条件を付けない。
+  // タッチが無ければイベントが発火しないだけで害はない。
+  (function () {
+    var $ptr = document.getElementById("ptr");
+    var $ptrText = document.getElementById("ptrText");
+    var TRIGGER = 70, PULL_MAX = 120, HOLD = 44;
+    var startY = 0, startX = 0, dist = 0, content = null;
+    var armed = false, active = false, busy = false;
+
+    function atTop() {
+      // 詳細画面を開いているときは、そちらがスクロール対象になる
+      if ($sheet.classList.contains("on")) return $sheet.scrollTop <= 0;
+      return (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+    }
+
+    function contentEl() {
+      return $sheet.classList.contains("on")
+        ? $sheet.querySelector(".inner") : document.querySelector(".wrap");
+    }
+
+    // 中身ごと押し下げる。ピルだけ動かすと検索欄に重なって読めなくなる。
+    function shiftTo(px, settle) {
+      var el = content || contentEl();
+      [el, $ptr].forEach(function (n) {
+        if (!n) return;
+        n.classList.toggle("ptr-settle", !!settle);
+      });
+      if (el) el.style.transform = px ? "translateY(" + px + "px)" : "";
+      $ptr.style.transform = "translateY(" + (px - HOLD) + "px)";
+    }
+
+    function paint(d) {
+      var shift = Math.min(d, PULL_MAX) * 0.45;
+      $ptr.style.opacity = Math.min(1, d / TRIGGER);
+      $ptr.classList.toggle("ready", d >= TRIGGER);
+      $ptrText.textContent = d >= TRIGGER ? "離して更新" : "引っぱって更新";
+      shiftTo(shift, false);
+    }
+
+    function reset() {
+      armed = active = false; dist = 0; busy = false;
+      shiftTo(0, true);
+      $ptr.style.opacity = "";
+      setTimeout(function () {
+        $ptr.classList.remove("show", "ready", "ptr-settle");
+        $ptr.style.transform = "";
+        var el = content || contentEl();
+        if (el) { el.classList.remove("ptr-settle"); el.style.transform = ""; }
+        content = null;
+      }, 240);
+    }
+
+    function message(text, keep) {
+      $ptr.classList.add("show");
+      $ptr.classList.remove("ready");
+      $ptr.style.opacity = "1";
+      $ptrText.textContent = text;
+      shiftTo(HOLD, true);      // 確認中は押し下げたまま保持する
+      if (!keep) setTimeout(reset, 1300);
+    }
+
+    function refresh() {
+      busy = true;
+      message("確認中…", true);
+      function finish(msg) { busy = false; message(msg, false); }
+
+      if (!("serviceWorker" in navigator) || location.protocol.indexOf("http") !== 0) {
+        location.reload();
+        return;
+      }
+      if (navigator.onLine === false) { finish("オフラインです"); return; }
+
+      navigator.serviceWorker.getRegistration().then(function (reg) {
+        if (!reg) { location.reload(); return; }
+        return reg.update().then(function () {
+          if (reg.installing || reg.waiting) {
+            // 新しい版があった。有効化されると controllerchange で読み直される
+            message("新しい版を取得中…", true);
+            setTimeout(function () { finish("最新です"); }, 10000);
+          } else {
+            finish("最新です");
+          }
+        });
+      }).catch(function () { finish("更新を確認できませんでした"); });
+    }
+
+    addEventListener("touchstart", function (e) {
+      if (busy || e.touches.length !== 1 || !atTop()) { armed = false; return; }
+      armed = true; active = false; dist = 0;
+      content = contentEl();
+      startY = e.touches[0].clientY;
+      startX = e.touches[0].clientX;
+    }, { passive: true });
+
+    addEventListener("touchmove", function (e) {
+      if (!armed || busy) return;
+      var dy = e.touches[0].clientY - startY;
+      var dx = e.touches[0].clientX - startX;
+
+      if (!active) {
+        // 横スワイプ（フォルムのタブ）や上方向は自前の処理に取り込まない
+        if (Math.abs(dx) > Math.abs(dy) || dy < 0) { armed = false; return; }
+        if (dy < 8) return;
+        active = true;
+        $ptr.classList.add("show");
+      }
+      if (!atTop()) { reset(); return; }
+
+      e.preventDefault();   // iOS のバウンドを止めて自前の表示に置き換える
+      dist = dy;
+      paint(dist);
+    }, { passive: false });
+
+    addEventListener("touchend", function () {
+      if (!armed || !active) { reset(); return; }
+      if (dist >= TRIGGER) { armed = active = false; refresh(); }
+      else reset();
+    }, { passive: true });
+
+    addEventListener("touchcancel", reset, { passive: true });
+  })();
 
   // ---- init --------------------------------------------------------------
   syncChips();
