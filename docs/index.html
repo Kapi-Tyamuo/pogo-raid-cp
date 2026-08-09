@@ -281,6 +281,12 @@
   .formtab em { font-style: normal; opacity: .65; margin-left: 4px; font-size: 10px; }
 
   .b-forms { color: var(--accent); }
+
+  /* 詳細画面のタイプと分類。一覧より少し大きめにして見出しの一部として読ませる */
+  .ident { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 12px 2px 0; }
+  .ident .t { font-size: 11.5px; padding: 3px 11px; }
+  .ident .badge { font-size: 10.5px; padding: 3px 7px; }
+
   .detail-modes { margin: 0 0 12px; }
   .bigcp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .bigcp > div {
@@ -811,6 +817,13 @@
       html += "</div>";
     }
 
+    // タイプと分類。フォルムでタイプが変わる（ガラルサンダー、ザシアンなど）ので、
+    // タブのすぐ下に置いて切り替えと連動させる。
+    html += '<div class="ident">' + typeChip(p[7]) + typeChip(p[8]) +
+      (cb ? '<span class="badge ' + cb[1] + '">' + cb[0] + "</span>" : "") +
+      (p[15] !== 1 ? '<span class="badge b-unreleased">未実装</span>' : "") +
+      "</div>";
+
     // 捕獲CP。条件を詰めるのはこの画面なので、一覧に戻らず切り替えられるようにする
     html += '<div class="card">' +
       "<h3>" + modeLabel + "（Lv" + lv + " / 個体値 " + fl + "以上）</h3>" +
@@ -823,7 +836,6 @@
         '<div><div class="k">最大CP（15/15/15）</div><div class="v" style="color:var(--good)">' + cpMax + "</div></div>" +
       "</div>" +
       '<div class="rangeline">CP <b>' + cpMin + " – " + cpMax + "</b> ／ HP <b>" + hpMin + " – " + hpMax + "</b></div>" +
-      (cb ? '<div style="margin-top:10px;text-align:center"><span class="badge ' + cb[1] + '">' + cb[0] + "</span></div>" : "") +
       "</div>";
 
     // 個体値逆引き
