@@ -104,7 +104,10 @@
     padding: 6px 12px; font-size: 12.5px; font-weight: 600;
     cursor: pointer; user-select: none; white-space: nowrap;
   }
-  .chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  /* 絞り込みチップは「パネルを開いている」ときも点灯させる。
+     絞り込みが効いているか（aria-pressed）とは別の状態なので両方を対象にする。 */
+  .chip[aria-pressed="true"],
+  .chip[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   .chip.shadow[aria-pressed="true"] {
     background: color-mix(in srgb, var(--shadow-c) 15%, transparent);
     color: var(--shadow-c); border-color: var(--shadow-c);
@@ -1070,8 +1073,12 @@
 
   function syncTypes() {
     var n = state.types.length + (state.hideUn ? 1 : 0);
-    $typeToggle.textContent = n ? "絞り込み " + n : "絞り込み";
+    var open = !$typePanel.hidden;
+    // 開いているかどうかと、絞り込みが効いているかどうかは別物なので両方出す。
+    // 数字＝絞り込み中、矢印＝パネルの開閉。
+    $typeToggle.textContent = (n ? "絞り込み " + n : "絞り込み") + (open ? " ▴" : " ▾");
     $typeToggle.setAttribute("aria-pressed", String(n > 0));
+    $typeToggle.setAttribute("aria-expanded", String(open));
     Array.prototype.forEach.call($typePanel.querySelectorAll(".tbtn"), function (b) {
       var idx = parseInt(b.dataset.type, 10);
       var on = state.types.indexOf(idx) >= 0;
@@ -1079,13 +1086,13 @@
       // 選択中はそのタイプの色で塗る
       b.style.background = on ? (TYPE_COLOR[TYPES[idx]] || "#888") : "";
     });
-    document.getElementById("typeClear").hidden = n === 0;
+    // 「タイプを解除」はタイプを選んでいるときだけ。未実装を隠すは対象外
+    document.getElementById("typeClear").hidden = state.types.length === 0;
   }
 
   $typeToggle.addEventListener("click", function () {
-    var open = $typePanel.hidden;
-    $typePanel.hidden = !open;
-    $typeToggle.setAttribute("aria-expanded", String(open));
+    $typePanel.hidden = !$typePanel.hidden;
+    syncTypes();
     measureHeader();   // 開閉で高さが変わるので地方見出しの固定位置を測り直す
   });
 
