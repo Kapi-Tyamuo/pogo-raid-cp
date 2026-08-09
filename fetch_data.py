@@ -221,22 +221,27 @@ DROP_FORMS = {"ZACIAN", "ZAMAZENTA"}
 # （名前に括弧が付いているため、そのままだと五十音順で「けんのおう」が先になる）。
 PREFERRED_FIRST = {"ZACIAN_HERO", "ZAMAZENTA_HERO"}
 
+# ニドラン♀（No.29）と♂（No.32）は元データの formId がどちらも NIDORAN で、
+# formId だけを重複判定に使うと後から来る♂がまるごと落ちる。図鑑番号と組にして見分ける。
 pokemon, seen = [], set()
 megas = []        # メガは整理処理の対象外なので別に持っておく
-species_of = {}   # formId -> 種のid（DARMANITAN_GALARIAN_ZEN -> DARMANITAN）
+species_of = {}   # (formId, 図鑑No) -> 種のid（DARMANITAN_GALARIAN_ZEN -> DARMANITAN）
 for p in dex:
     for cand in [p] + list((p.get("regionForms") or {}).values()):
         e = entry(cand)
-        if e and e[0] not in seen and e[0] not in DROP_FORMS:
-            seen.add(e[0])
-            species_of[e[0]] = cand["id"]
+        if not e or e[0] in DROP_FORMS:
+            continue
+        key = (e[0], e[3])
+        if key not in seen:
+            seen.add(key)
+            species_of[key] = cand["id"]
             pokemon.append(e)
     base_e = entry(p)
     if base_e:
         for m in (p.get("megaEvolutions") or {}).values():
             me = mega_entry(p, m, (base_e[10], base_e[11], base_e[12], base_e[13]))
-            if me and me[0] not in seen:
-                seen.add(me[0])
+            if me and (me[0], me[3]) not in seen:
+                seen.add((me[0], me[3]))
                 megas.append(me)
 
 # --- 元データで日本語のフォーム名が抜けているものを補う ----------------------
@@ -333,7 +338,7 @@ for (name, _dex), members in groups.items():
         continue
     for m in members:
         # formId から種のid を取り除いた残りがフォーム名にあたる
-        base_id = species_of[m[0]]
+        base_id = species_of[(m[0], m[3])]
         suffix = m[0][len(base_id):].lstrip("_") if m[0].startswith(base_id) else m[0]
         if not suffix:
             continue  # 素のフォームはそのままの名前にしておく
