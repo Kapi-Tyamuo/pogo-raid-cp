@@ -566,12 +566,10 @@
   function passesFilter(i) {
     var p = MONS[i];
     if (state.hideUn && p[15] !== 1) return false;
-    if (state.types.length) {
-      // 複数選んだときはどれか1つに当てはまれば出す（ほのお＋みず＝どちらか）
-      for (var k = 0; k < state.types.length; k++) {
-        if (p[7] === state.types[k] || p[8] === state.types[k]) return true;
-      }
-      return false;
+    // 選んだタイプを「すべて」持つものだけ出す。ポケモンは最大2タイプなので、
+    // 3つ以上選べば必ず0件になる。
+    for (var k = 0; k < state.types.length; k++) {
+      if (p[7] !== state.types[k] && p[8] !== state.types[k]) return false;
     }
     return true;
   }
@@ -775,7 +773,8 @@
     var filters = [];
     if (state.hideUn) filters.push("未実装を除く");
     if (state.types.length) {
-      filters.push("タイプ：" + state.types.map(function (t) { return TYPES[t]; }).join("・"));
+      // AND なので「・」ではなく「＋」でつなぐ（両方を持つもの、と読めるように）
+      filters.push("タイプ：" + state.types.map(function (t) { return TYPES[t]; }).join("＋"));
     }
     var fx = filters.length ? "（" + filters.join(" / ") + "）" : "";
 
