@@ -74,9 +74,9 @@
     background: color-mix(in srgb, var(--bg) 88%, transparent);
     backdrop-filter: saturate(1.6) blur(12px);
     border-bottom: 1px solid var(--line);
-    padding: calc(10px + var(--sat)) 0 8px;
+    padding: calc(8px + var(--sat)) 0 8px;
   }
-  .title { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 8px; }
+  .title { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 6px; }
   .title h1 { font-size: 16px; margin: 0; letter-spacing: .01em; }
   .title span { font-size: 11px; color: var(--muted); }
   .searchbox { position: relative; }
@@ -96,7 +96,7 @@
   }
   .clearbtn.on { display: block; }
 
-  .modes { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .modes { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
   .chip {
     border: 1px solid var(--line); background: var(--panel);
     color: var(--muted); border-radius: 999px;
@@ -126,10 +126,10 @@
   .ptr-settle { transition: transform .22s ease; }
   @media (prefers-reduced-motion: reduce) { .ptr-settle { transition: none; } }
 
-  /* ---- 表示範囲の切替（ヘッダーには置かず、スクロールで流れる位置に） ---- */
+  /* ---- 表示範囲の切替。ヘッダーに入れて一緒に固定する ---- */
   .browse {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 12px 2px 0;
+    margin-top: 6px; padding: 0 2px;
   }
   .seg {
     display: flex; background: var(--panel-2); border: 1px solid var(--line);
@@ -342,15 +342,14 @@
       <button class="chip" id="mWeather" aria-pressed="false">☀️ 天候ブースト</button>
       <button class="chip shadow" id="mShadow" aria-pressed="false">🟣 シャドウレイド</button>
     </div>
-  </header>
-
-  <div class="browse" id="browse">
-    <div class="seg" role="group" aria-label="表示するポケモンの範囲">
-      <button type="button" class="seg-btn" id="scopeRaid" aria-pressed="true">伝説・幻・UB</button>
-      <button type="button" class="seg-btn" id="scopeAll" aria-pressed="false">全ポケモン</button>
+    <div class="browse" id="browse">
+      <div class="seg" role="group" aria-label="表示するポケモンの範囲">
+        <button type="button" class="seg-btn" id="scopeRaid" aria-pressed="true">伝説・幻・UB</button>
+        <button type="button" class="seg-btn" id="scopeAll" aria-pressed="false">全ポケモン</button>
+      </div>
+      <button type="button" class="chip" id="hideUn" aria-pressed="false">未実装を隠す</button>
     </div>
-    <button type="button" class="chip" id="hideUn" aria-pressed="false">未実装を隠す</button>
-  </div>
+  </header>
 
   <div class="hint" id="hint"></div>
   <div class="list" id="list"></div>
