@@ -232,6 +232,7 @@
   .b-myth { color: #db2777; }
   .b-ub { color: #0891b2; }
   .b-legacy { color: var(--warn); }
+  .b-signature { color: var(--good); }
   .b-unreleased { color: var(--muted); }
   .row.unreleased { opacity: .58; }
 
@@ -815,20 +816,23 @@
   }
 
   // ---- 詳細 --------------------------------------------------------------
-  function moveRow(mi, legacy) {
+  // kind: 0=通常 / 1=レガシー / 2=専用技
+  function moveRow(mi, kind) {
     var m = MOVES[mi];
     var sec = (m[4] / 1000).toFixed(1);
+    var badge = kind === 1 ? ' <span class="badge b-legacy">レガシー</span>'
+              : kind === 2 ? ' <span class="badge b-signature">専用</span>' : "";
     return '<div class="move">' + typeChip(m[1]) +
-      '<span class="mn">' + esc(m[0]) +
-        (legacy ? ' <span class="badge b-legacy">レガシー</span>' : "") + "</span>" +
+      '<span class="mn">' + esc(m[0]) + badge + "</span>" +
       '<span class="st">威力' + m[2] + " / E" + (m[3] > 0 ? "+" + m[3] : m[3]) + " / " + sec + "秒</span>" +
       "</div>";
   }
 
-  function moveList(ids, elite) {
+  function moveList(ids, elite, sig) {
     var out = "";
-    ids.forEach(function (i) { out += moveRow(i, false); });
-    elite.forEach(function (i) { out += moveRow(i, true); });
+    ids.forEach(function (i) { out += moveRow(i, 0); });
+    elite.forEach(function (i) { out += moveRow(i, 1); });
+    (sig || []).forEach(function (i) { out += moveRow(i, 2); });
     return out || '<div class="move"><span class="mn" style="color:var(--muted);font-weight:500">データなし</span></div>';
   }
 
@@ -934,8 +938,9 @@
     // 技
     html += '<div class="card"><h3>おぼえる技</h3>' +
       '<div class="sec-label">通常技</div><div class="moves">' + moveList(p[10], p[12]) + "</div>" +
-      '<div class="sec-label">スペシャル技</div><div class="moves">' + moveList(p[11], p[13]) + "</div>" +
+      '<div class="sec-label">スペシャル技</div><div class="moves">' + moveList(p[11], p[13], p[17]) + "</div>" +
       '<div class="note" style="padding:0;margin-top:12px">「レガシー」はイベント限定・わざマシンでのみ習得できる技です（通常のわざマシンでは出ません）。' +
+        (p[17] && p[17].length ? "「専用」はそのポケモン（フォルム）だけが使える技です。" : "") +
         (isMega ? megaWord + "しても技は変わらないので、元の姿と同じものを載せています。" : "") +
       "</div></div>";
 

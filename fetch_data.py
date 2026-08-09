@@ -6,7 +6,7 @@
 
 出典:
   pokedex.json ... https://pokemon-go-api.github.io/pokemon-go-api/  (種族値・技・多言語名・世代)
-  game_master  ... https://github.com/PokeMiners/game_masters        (CPM表)
+  game_master  ... https://github.com/PokeMiners/game_masters        (CPM表・専用技・メガ)
 
 実装済みかどうかは、ゲームマスターの pokemonSettings に 3Dモデルの設定
 (modelScaleV2) があるかで判定する。Niantic は未実装のポケモンの数値も
@@ -24,6 +24,9 @@ OUT = os.path.join(HERE, "src", "godata.json")
 SOURCES = {
     "pokedex.json": "https://pokemon-go-api.github.io/pokemon-go-api/api/pokedex.json",
     "gm.json": "https://raw.githubusercontent.com/PokeMiners/game_masters/master/latest/latest.json",
+    # 専用技は pokedex.json に載らないことがあり、その場合ゲームマスターから
+    # 拾うことになるが、あちらに日本語名は入っていないのでこれで補う。
+    "i18n_ja.json": "https://raw.githubusercontent.com/PokeMiners/pogo_assets/master/Texts/Latest%20APK/JSON/i18n_japanese.json",
 }
 
 
@@ -42,6 +45,10 @@ def load(name, use_cache):
 use_cache = "--cache" in sys.argv
 dex = load("pokedex.json", use_cache)
 gm = load("gm.json", use_cache)
+
+# ["キー", "訳", "キー", "訳", ...] の平坦な配列で来る
+_i18n_raw = load("i18n_ja.json", use_cache)["data"]
+I18N = dict(zip(_i18n_raw[0::2], _i18n_raw[1::2]))
 
 # 3Dモデルの設定を持つ形態＝ゲームに入っている、とみなす。
 # ニドラン♀♂は formId が共通なので、種のid でも引けるようにしておく。
@@ -86,6 +93,66 @@ def move_idx(m):
     return move_index[mid]
 
 
+# --- 専用技 ------------------------------------------------------------------
+# ガリョウテンセイやきょじゅうざんのような専用技は pokedex.json の技リストに
+# 入っておらず、ゲームマスター側の別の場所に散らばっている。
+#   nonTmCinematicMoves                     … わざマシンで覚えられない技（レックウザ）
+#   formChange[].moveReassignment           … フォルム変更時の技の入れ替え
+#     existingMoves    … そのテンプレート自身が持つ技
+#     replacementMoves … 変更先のフォルムが得る技
+GM_MOVES = {}          # 技id -> (番号, moveSettings)
+for _e in gm:
+    _ms = _e.get("data", {}).get("moveSettings")
+    if _ms:
+        _num = _e["templateId"].split("_")[0].lstrip("V")
+        GM_MOVES[_ms["movementId"]] = (_num, _ms)
+
+signature = collections.defaultdict(set)   # formId -> 技idの集合
+for _e in gm:
+    ps = _e.get("data", {}).get("pokemonSettings")
+    if not ps:
+        continue
+    me = ps.get("form") or ps["pokemonId"]
+    for mv in (ps.get("nonTmCinematicMoves") or []):
+        signature[me].add(mv)
+    for fc in (ps.get("formChange") or []):
+        for pair in ((fc.get("moveReassignment") or {}).get("cinematicMoves") or []):
+            for mv in pair.get("existingMoves") or []:
+                signature[me].add(mv)
+            for other in (fc.get("availableForm") or []):
+                for mv in pair.get("replacementMoves") or []:
+                    signature[other].add(mv)
+
+# ときのほうこう・あくうせつだんはゲームマスターのどのポケモンにも紐づいていないが、
+# 技の定義（冒険効果つき）は入っていて、ゲームにも実装されている。
+# データ側の抜けなので、ここで補う。
+signature["DIALGA_ORIGIN"].add("ROAR_OF_TIME")
+signature["PALKIA_ORIGIN"].add("SPACIAL_REND")
+
+
+def gm_move_idx(move_id):
+    """ゲームマスターの技を技テーブルに登録して添字を返す。日本語名は i18n から。"""
+    if move_id in move_index:
+        return move_index[move_id]
+    got = GM_MOVES.get(move_id)
+    if not got:
+        return None
+    num, ms = got
+    name = I18N.get("move_name_" + num)
+    if not name:
+        return None
+    move_index[move_id] = len(move_ids)
+    move_ids.append(move_id)
+    moves[move_id] = [
+        name,
+        type_index.get(ms.get("pokemonType"), -1),
+        int(ms.get("power") or 0),
+        int(ms.get("energyDelta") or 0),
+        int(ms.get("durationMs") or 0),
+    ]
+    return move_index[move_id]
+
+
 CLASS_MAP = {
     None: 0,
     "POKEMON_CLASS_LEGENDARY": 1,
@@ -110,6 +177,7 @@ def entry(p):
         p.get("generation") or 0,
         is_released(p["formId"], p["id"]),
         0,   # メガシンカ種別（0=通常 / 1=メガシンカ / 2=ゲンシカイキ）
+        [],  # 専用技（あとで埋める）
     ]
 
 
@@ -140,6 +208,7 @@ def mega_entry(base, m, base_moves):
         base.get("generation") or 0,
         1,      # 上のとおり、メガは実装状況を判定しない
         kind,
+        [],     # 専用技（メガは元の姿のものを下で引き継ぐ）
     ]
 
 
@@ -282,6 +351,29 @@ dupe = [k for k, v in collections.Counter((e[1], e[3]) for e in pokemon).items()
 if dupe:
     sys.exit("同名のエントリが残っています: %r" % dupe)
 
+# --- 専用技を割り当てる ------------------------------------------------------
+# すでに通常技・スペシャル技・レガシーに入っているものは除く。
+# （ザシアンの formChange には IRON_HEAD も出てくるが、これは普通の技）
+sig_count = 0
+for e in pokemon:
+    known = set(e[10]) | set(e[11]) | set(e[12]) | set(e[13])
+    got = []
+    for mv in sorted(signature.get(e[0], ())):
+        mi = gm_move_idx(mv)
+        if mi is not None and mi not in known:
+            got.append(mi)
+    e[17] = got
+    sig_count += len(got)
+
+# メガは技を持たないので、元の姿の専用技をそのまま引き継ぐ（メガレックウザの
+# ガリョウテンセイなど）。base_moves と同じ考え方。
+_sig_by_form = {e[0]: e[17] for e in pokemon}
+for e in megas:
+    for suf in ("_MEGA_X", "_MEGA_Y", "_PRIMAL", "_MEGA"):
+        if e[0].endswith(suf):
+            e[17] = list(_sig_by_form.get(e[0][:-len(suf)], []))
+            break
+
 # メガは整理処理（統合・テンプレート削除・フォーム名の補完）を通さずに足す。
 # 名前が重複しないうえ、通常フォームと混ぜて判定すると意味が変わってしまうため。
 pokemon += megas
@@ -309,4 +401,5 @@ json.dump(
 print("src/godata.json", f"{os.path.getsize(OUT):,} bytes /",
       len(pokemon), "種 /", len(move_ids), "技 / CPM Lv20 =", cpm[19])
 print("  CPが同じフォームを統合:", before_merge - len(merged), "件 /",
-      "テンプレート行を削除:", len(redundant), "件")
+      "テンプレート行を削除:", len(redundant), "件 /",
+      "専用技:", sig_count, "件")
