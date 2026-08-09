@@ -109,6 +109,37 @@ def entry(p):
         ids("eliteQuickMoves"), ids("eliteCinematicMoves"),
         p.get("generation") or 0,
         is_released(p["formId"], p["id"]),
+        0,   # メガシンカ種別（0=通常 / 1=メガシンカ / 2=ゲンシカイキ）
+    ]
+
+
+# --- メガシンカ・ゲンシカイキ -----------------------------------------------
+# ゲームマスターでは pokemonSettings.tempEvoOverrides（種族値・タイプ）に入っている。
+#
+# 実装状況は判定しない。使えそうな材料は temporaryEvolutionSettings の
+# assetBundleValue だけだが、ゲームマスターが2026-04で止まっているため、
+# それ以降に来たメガ（メガミュウツーX/Y、メガライチュウX/Y など）を
+# 未実装と誤判定してしまう。Z-A のメガでも早期に来たメガカイリュー・
+# メガウツボット・メガカラマネロは判定できるので、単に情報が古いだけ。
+# 誤ったバッジを出すより出さない方がましなので、メガは一律で実装済み扱いにする。
+# （通常フォームの判定は pokemonSettings.modelScaleV2 を見ており、こちらは有効。
+#  tempEvoOverrides の modelScaleV2 は基準と違う拡大率のときだけ付くので使えない。）
+def mega_entry(base, m, base_moves):
+    """メガは技を持たない（元の姿の技をそのまま使う）ので、技は base から借りる。"""
+    st = m.get("stats")
+    if not st:
+        return None
+    mid = m["id"]
+    kind = 2 if mid.endswith("_PRIMAL") else 1
+    return [
+        mid, m["names"]["Japanese"], m["names"]["English"], base["dexNr"],
+        st["attack"], st["defense"], st["stamina"],
+        type_idx(m["primaryType"]), type_idx(m["secondaryType"]),
+        CLASS_MAP.get(base.get("pokemonClass"), 0),
+        base_moves[0], base_moves[1], base_moves[2], base_moves[3],
+        base.get("generation") or 0,
+        1,      # 上のとおり、メガは実装状況を判定しない
+        kind,
     ]
 
 
@@ -122,6 +153,7 @@ DROP_FORMS = {"ZACIAN", "ZAMAZENTA"}
 PREFERRED_FIRST = {"ZACIAN_HERO", "ZAMAZENTA_HERO"}
 
 pokemon, seen = [], set()
+megas = []        # メガは整理処理の対象外なので別に持っておく
 species_of = {}   # formId -> 種のid（DARMANITAN_GALARIAN_ZEN -> DARMANITAN）
 for p in dex:
     for cand in [p] + list((p.get("regionForms") or {}).values()):
@@ -130,6 +162,13 @@ for p in dex:
             seen.add(e[0])
             species_of[e[0]] = cand["id"]
             pokemon.append(e)
+    base_e = entry(p)
+    if base_e:
+        for m in (p.get("megaEvolutions") or {}).values():
+            me = mega_entry(p, m, (base_e[10], base_e[11], base_e[12], base_e[13]))
+            if me and me[0] not in seen:
+                seen.add(me[0])
+                megas.append(me)
 
 # --- 元データで日本語のフォーム名が抜けているものを補う ----------------------
 # メテノは「りゅうせいのすがた（種族値 116/194/155）」と「コアのすがた（218/131/155）」で
@@ -166,6 +205,7 @@ def cp_signature(e):
 
 
 merged = {}
+before_merge = len(pokemon)
 for e in pokemon:
     key = cp_signature(e)
     cur = merged.get(key)
@@ -242,7 +282,13 @@ dupe = [k for k, v in collections.Counter((e[1], e[3]) for e in pokemon).items()
 if dupe:
     sys.exit("同名のエントリが残っています: %r" % dupe)
 
-pokemon.sort(key=lambda e: (e[3], 0 if e[0] in PREFERRED_FIRST else 1, e[0]))
+# メガは整理処理（統合・テンプレート削除・フォーム名の補完）を通さずに足す。
+# 名前が重複しないうえ、通常フォームと混ぜて判定すると意味が変わってしまうため。
+pokemon += megas
+
+# 図鑑番号順。メガは同じ番号の中でいちばん後ろに置いて、タブの末尾に出す。
+pokemon.sort(key=lambda e: (e[3], 1 if e[16] else 0,
+                            0 if e[0] in PREFERRED_FIRST else 1, e[0]))
 
 cpm = None
 for e in gm:
@@ -262,5 +308,5 @@ json.dump(
 )
 print("src/godata.json", f"{os.path.getsize(OUT):,} bytes /",
       len(pokemon), "種 /", len(move_ids), "技 / CPM Lv20 =", cpm[19])
-print("  CPが同じフォームを統合:", len(seen) - len(merged), "件 /",
+print("  CPが同じフォームを統合:", before_merge - len(merged), "件 /",
       "テンプレート行を削除:", len(redundant), "件")

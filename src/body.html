@@ -540,9 +540,12 @@
     return REGIONS.length - 1;   // 図鑑が増えたぶんは最後の地方に寄せる
   }
 
+  // メガシンカ・ゲンシカイキは捕まえられる姿ではないので一覧には出さず、
+  // 詳細画面のタブからだけ見られるようにする。
   var RAID_LIST = [];   // 伝説・幻・UB
   var ALL_LIST = [];
   MONS.forEach(function (p, i) {
+    if (p[16]) return;
     ALL_LIST.push(i);
     if (p[9] >= 1) RAID_LIST.push(i);
   });
@@ -586,6 +589,22 @@
     return pre ? pre[1] : null;
   }
 
+  // メガは「メガリザードンＸ」のように括弧も接頭辞も無い別名なので、
+  // formId の末尾からタブ名を決める。長い接尾辞から先に見る。
+  var MEGA_LABEL = [["_MEGA_X", "メガシンカＸ"], ["_MEGA_Y", "メガシンカＹ"],
+                    ["_PRIMAL", "ゲンシカイキ"], ["_MEGA", "メガシンカ"]];
+
+  function tabLabel(i) {
+    var p = MONS[i];
+    if (p[16]) {
+      for (var k = 0; k < MEGA_LABEL.length; k++) {
+        var suf = MEGA_LABEL[k][0];
+        if (p[0].slice(-suf.length) === suf) return MEGA_LABEL[k][1];
+      }
+    }
+    return formLabel(p[1]) || "基本";
+  }
+
   function baseName(name) {
     var m = /^(.+?) \(/.exec(name);
     if (m) return m[1];
@@ -603,14 +622,16 @@
   var DEFAULT_FORM = {};
   Object.keys(FORMS).forEach(function (dexNr) {
     var list = FORMS[dexNr];
+    // メガは代表にしない（捕まえられる姿ではないので一覧に出さない）
+    var base = list.filter(function (i) { return !MONS[i][16]; });
     var pick = null;
-    for (var k = 0; k < list.length && !pick; k++) {
-      if (!formLabel(MONS[list[k]][1])) pick = list[k];
+    for (var k = 0; k < base.length && !pick; k++) {
+      if (!formLabel(MONS[base[k]][1])) pick = base[k];
     }
-    for (var k2 = 0; k2 < list.length && !pick; k2++) {
-      if (!REGIONAL.test(MONS[list[k2]][1])) pick = list[k2];
+    for (var k2 = 0; k2 < base.length && !pick; k2++) {
+      if (!REGIONAL.test(MONS[base[k2]][1])) pick = base[k2];
     }
-    DEFAULT_FORM[dexNr] = pick === null ? list[0] : pick;
+    DEFAULT_FORM[dexNr] = pick === null ? (base[0] !== undefined ? base[0] : list[0]) : pick;
   });
 
   // 1行ぶんの情報。i=表示するエントリ、n=同じ図鑑番号で表示対象の数、
@@ -841,12 +862,15 @@
       ' <span class="dex" style="font-weight:500;color:var(--muted);font-size:12px">No.' + p[3] + "</span>";
 
     var modeLabel = (state.shadow ? "シャドウレイド" : "通常レイド") + (state.weather ? "・天候ブースト" : "");
+    // メガシンカ・ゲンシカイキは捕まえる姿ではないので、CPカードの書き方を変える
+    var megaWord = p[16] === 2 ? "ゲンシカイキ" : "メガシンカ";
+    var isMega = p[16] > 0;
     var html = "";
     if (siblings.length > 1) {
       html += '<div class="formtabs" role="tablist" aria-label="フォルムの切替">';
       siblings.forEach(function (j) {
         html += '<button type="button" class="formtab" role="tab" data-form="' + j + '"' +
-          ' aria-selected="' + (j === i) + '">' + esc(formLabel(MONS[j][1]) || "基本") +
+          ' aria-selected="' + (j === i) + '">' + esc(tabLabel(j)) +
           (MONS[j][15] !== 1 ? "<em>未実装</em>" : "") + "</button>";
       });
       html += "</div>";
@@ -857,11 +881,13 @@
     html += '<div class="ident">' + typeChip(p[7]) + typeChip(p[8]) +
       (cb ? '<span class="badge ' + cb[1] + '">' + cb[0] + "</span>" : "") +
       (p[15] !== 1 ? '<span class="badge b-unreleased">未実装</span>' : "") +
+      (isMega ? '<span class="badge b-forms">' + megaWord + "</span>" : "") +
       "</div>";
 
     // 捕獲CP。条件を詰めるのはこの画面なので、一覧に戻らず切り替えられるようにする
     html += '<div class="card">' +
-      "<h3>" + modeLabel + "（Lv" + lv + " / 個体値 " + fl + "以上）</h3>" +
+      "<h3>" + (isMega ? megaWord + "後" : modeLabel) +
+        "（Lv" + lv + " / 個体値 " + fl + "以上）</h3>" +
       '<div class="modes detail-modes">' +
         '<button type="button" class="chip" id="dWeather" aria-pressed="' + state.weather + '">☀️ 天候ブースト</button>' +
         '<button type="button" class="chip shadow" id="dShadow" aria-pressed="' + state.shadow + '">🟣 シャドウレイド</button>' +
@@ -873,8 +899,11 @@
       '<div class="rangeline">CP <b>' + cpMin + " – " + cpMax + "</b> ／ HP <b>" + hpMin + " – " + hpMax + "</b></div>" +
       "</div>";
 
-    // 個体値逆引き
-    html += '<div class="card">' +
+    // 個体値逆引き。メガは捕まえる姿ではないので出さない
+    html += isMega ? ('<div class="card"><h3>個体値の逆引き</h3>' +
+      '<div class="note" style="padding:0">' + megaWord +
+      "後のポケモンは捕獲できません。個体値は元の姿のタブで調べてください。</div></div>") :
+      ('<div class="card">' +
       "<h3>個体値の逆引き</h3>" +
       '<div class="iv-inputs">' +
         '<div class="field"><label>捕獲画面のCP</label>' +
@@ -883,7 +912,7 @@
           '<input id="inHP" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="' + hpMin + '–' + hpMax + '"></div>' +
       "</div>" +
       '<div class="result" id="ivResult"></div>' +
-      "</div>";
+      "</div>");
 
     // CP早見
     var rows = [[20, "通常レイド"], [25, "天候ブースト"], [40, "Lv40（強化上限）"], [50, "Lv50（最大強化）"]];
@@ -906,8 +935,9 @@
     html += '<div class="card"><h3>おぼえる技</h3>' +
       '<div class="sec-label">通常技</div><div class="moves">' + moveList(p[10], p[12]) + "</div>" +
       '<div class="sec-label">スペシャル技</div><div class="moves">' + moveList(p[11], p[13]) + "</div>" +
-      '<div class="note" style="padding:0;margin-top:12px">「レガシー」はイベント限定・わざマシンでのみ習得できる技です（通常のわざマシンでは出ません）。</div>' +
-      "</div>";
+      '<div class="note" style="padding:0;margin-top:12px">「レガシー」はイベント限定・わざマシンでのみ習得できる技です（通常のわざマシンでは出ません）。' +
+        (isMega ? megaWord + "しても技は変わらないので、元の姿と同じものを載せています。" : "") +
+      "</div></div>";
 
     $dBody.innerHTML = html;
     $sheet.classList.add("on");
@@ -931,6 +961,7 @@
     var $cp = document.getElementById("inCP");
     var $hp = document.getElementById("inHP");
     var $res = document.getElementById("ivResult");
+    if (!$cp) { $sheet.scrollTop = prevScroll; return; }   // メガは逆引き欄が無い
 
     function solve() {
       state.cpIn = $cp.value;
