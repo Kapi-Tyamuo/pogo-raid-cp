@@ -144,6 +144,30 @@
   .seg-btn[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
   .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+  /* 絞り込み。タイプ18個を常に並べるとヘッダーが高くなりすぎるので開閉式にする */
+  .typepanel {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+    margin-top: 8px; padding: 8px 2px 2px;
+    border-top: 1px solid var(--line);
+  }
+  .typepanel[hidden] { display: none; }
+  .tgrid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tbtn {
+    font: inherit; font-size: 12px; font-weight: 700;
+    color: var(--muted); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 5px 11px; cursor: pointer; white-space: nowrap;
+  }
+  .tbtn[aria-pressed="true"] { color: #fff; border-color: transparent; }
+  .tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tclear {
+    font: inherit; font-size: 12px; font-weight: 700;
+    color: var(--accent); background: transparent;
+    border: 1px dashed var(--accent); border-radius: 999px;
+    padding: 5px 11px; cursor: pointer; white-space: nowrap;
+  }
+  .tclear[hidden] { display: none; }
+
   /* ---- list ---- */
   .hint { color: var(--muted); font-size: 12px; padding: 14px 4px 6px; }
 
@@ -353,7 +377,12 @@
         <button type="button" class="seg-btn" id="scopeRaid" aria-pressed="true">伝説・幻・UB</button>
         <button type="button" class="seg-btn" id="scopeAll" aria-pressed="false">全ポケモン</button>
       </div>
+      <button type="button" class="chip" id="typeToggle" aria-expanded="false"
+              aria-controls="typePanel" aria-pressed="false">絞り込み</button>
+    </div>
+    <div class="typepanel" id="typePanel" hidden>
       <button type="button" class="chip" id="hideUn" aria-pressed="false">未実装を隠す</button>
+      <div class="tgrid" id="typeGrid"></div>
     </div>
   </header>
 
@@ -431,6 +460,7 @@
     weather: false, shadow: false,   // CPの計算条件
     scopeAll: false,                 // 一覧に全ポケモンを出すか（既定は伝説・幻・UB）
     hideUn: false,                   // 未実装を隠すか
+    types: [],                       // 絞り込むタイプ（TYPES の添字）。検索語と同じ扱いで保存しない
     q: "", sel: -1
   };
   var LS = "pogoRaidCP.v1";
@@ -465,6 +495,8 @@
   var $scopeAll = document.getElementById("scopeAll");
   var $hideUn = document.getElementById("hideUn");
   var $browse = document.getElementById("browse");
+  var $typeToggle = document.getElementById("typeToggle");
+  var $typePanel = document.getElementById("typePanel");
   var $sheet = document.getElementById("sheet");
   var $dName = document.getElementById("dName");
   var $dBody = document.getElementById("dBody");
@@ -513,7 +545,16 @@
   });
 
   function passesFilter(i) {
-    return !state.hideUn || MONS[i][15] === 1;
+    var p = MONS[i];
+    if (state.hideUn && p[15] !== 1) return false;
+    if (state.types.length) {
+      // 複数選んだときはどれか1つに当てはまれば出す（ほのお＋みず＝どちらか）
+      for (var k = 0; k < state.types.length; k++) {
+        if (p[7] === state.types[k] || p[8] === state.types[k]) return true;
+      }
+      return false;
+    }
+    return true;
   }
 
   // ---- フォルムのまとめ --------------------------------------------------
@@ -593,7 +634,10 @@
         var def = DEFAULT_FORM[dexNr];
         // 代表が絞り込みで消えていたら、残っている先頭を使う
         var pick = list.indexOf(def) >= 0 ? def : list[0];
-        rows.push(rowOf(pick, FORMS[dexNr].length, FORMS[dexNr].length > 1));
+        // 代表がそのまま残っているときだけ種の名前で出す。絞り込みで別のフォルムに
+        // 入れ替わったときは、そのフォルム名を出さないと表示とタイプが食い違う
+        // （タイプ「ドラゴン」で絞ると、ナッシーの代表がアローラのすがたになる）。
+        rows.push(rowOf(pick, FORMS[dexNr].length, pick === def && FORMS[dexNr].length > 1));
       });
       rows.sort(function (x, y) { return MONS[x.i][3] - MONS[y.i][3]; });
       return rows;
@@ -708,11 +752,19 @@
       });
     }
 
+    // 何で絞り込んでいるかを出す。検索語とタイプは併用できるので両方書く
+    var filters = [];
+    if (state.hideUn) filters.push("未実装を除く");
+    if (state.types.length) {
+      filters.push("タイプ：" + state.types.map(function (t) { return TYPES[t]; }).join("・"));
+    }
+    var fx = filters.length ? "（" + filters.join(" / ") + "）" : "";
+
     var scopeName = state.scopeAll ? "全ポケモン" : "伝説・幻・UB";
     $hint.textContent = state.q
-      ? hits.length + " 件"
-      : scopeName + " " + hits.length + " 件を地方順に表示中" +
-        (state.hideUn ? "（未実装を除く）" : "") + "。名前を入力すると全 " + MONS.length + " 種から検索します。";
+      ? hits.length + " 件" + fx
+      : scopeName + " " + hits.length + " 件を地方順に表示中" + fx +
+        "。名前を入力すると全 " + MONS.length + " 種から検索します。";
 
     $list.innerHTML = hits.length ? "" : '<div class="hint">該当なし</div>';
     section = null;
@@ -1001,7 +1053,57 @@
     state.hideUn = !state.hideUn;
     persist();
     syncChips();
+    syncTypes();
     renderList();
+  });
+
+  // ---- タイプの絞り込み ----------------------------------------------------
+  (function buildTypeGrid() {
+    var html = "";
+    TYPES.forEach(function (name, idx) {
+      html += '<button type="button" class="tbtn" data-type="' + idx + '"' +
+        ' aria-pressed="false">' + esc(name) + "</button>";
+    });
+    html += '<button type="button" class="tclear" id="typeClear" hidden>タイプを解除</button>';
+    document.getElementById("typeGrid").innerHTML = html;
+  })();
+
+  function syncTypes() {
+    var n = state.types.length + (state.hideUn ? 1 : 0);
+    $typeToggle.textContent = n ? "絞り込み " + n : "絞り込み";
+    $typeToggle.setAttribute("aria-pressed", String(n > 0));
+    Array.prototype.forEach.call($typePanel.querySelectorAll(".tbtn"), function (b) {
+      var idx = parseInt(b.dataset.type, 10);
+      var on = state.types.indexOf(idx) >= 0;
+      b.setAttribute("aria-pressed", String(on));
+      // 選択中はそのタイプの色で塗る
+      b.style.background = on ? (TYPE_COLOR[TYPES[idx]] || "#888") : "";
+    });
+    document.getElementById("typeClear").hidden = n === 0;
+  }
+
+  $typeToggle.addEventListener("click", function () {
+    var open = $typePanel.hidden;
+    $typePanel.hidden = !open;
+    $typeToggle.setAttribute("aria-expanded", String(open));
+    measureHeader();   // 開閉で高さが変わるので地方見出しの固定位置を測り直す
+  });
+
+  $typePanel.addEventListener("click", function (e) {
+    var btn = e.target.closest(".tbtn");
+    if (btn) {
+      var idx = parseInt(btn.dataset.type, 10);
+      var at = state.types.indexOf(idx);
+      if (at >= 0) state.types.splice(at, 1);
+      else state.types.push(idx);
+    } else if (e.target.closest(".tclear")) {
+      state.types = [];
+    } else {
+      return;
+    }
+    syncTypes();
+    renderList();
+    window.scrollTo(0, 0);
   });
 
   $list.addEventListener("click", function (e) {
@@ -1144,6 +1246,7 @@
 
   // ---- init --------------------------------------------------------------
   syncChips();
+  syncTypes();
   renderList();
 })();
 </script>

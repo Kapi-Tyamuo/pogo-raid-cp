@@ -1,5 +1,5 @@
 // build.py が生成。手で編集しても次のビルドで上書きされる。
-var CACHE = "raidcp-ca3344669eac";
+var CACHE = "raidcp-2c23351bb35a";
 var ASSETS = ["./", "./index.html", "./manifest.webmanifest",
               "./icon-180.png", "./icon-192.png", "./icon-512.png",
               "./icon-maskable-512.png"];
