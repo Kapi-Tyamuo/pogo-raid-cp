@@ -188,6 +188,36 @@
     padding: 5px 11px; cursor: pointer; white-space: nowrap;
   }
   .tclear[hidden] { display: none; }
+  .tlabel { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+
+  /* ---- 火力ランキング ---- */
+  .rank {
+    width: 100%; text-align: left; font: inherit; color: inherit;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px 13px; cursor: pointer; box-shadow: var(--shadow);
+    display: grid; grid-template-columns: auto 1fr auto; gap: 2px 11px; align-items: center;
+  }
+  .rank:active { transform: scale(.995); }
+  .rank:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* 行はどれも「順位 / 名前・技 / DPS」の3列。自動配置に任せると
+     行をまたぐ .no と .dps がぶつかって並びが崩れるので、位置を明示する。 */
+  .rank .no {
+    grid-column: 1; grid-row: 1 / 3;
+    font-size: 15px; font-weight: 800; color: var(--muted);
+    font-variant-numeric: tabular-nums; min-width: 24px; text-align: right;
+  }
+  .rank .nm {
+    grid-column: 2; grid-row: 1;
+    font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  }
+  .rank .mv { grid-column: 2; grid-row: 2; font-size: 11.5px; color: var(--muted); }
+  .rank .dps {
+    grid-column: 3; grid-row: 1 / 3;
+    text-align: right; font-variant-numeric: tabular-nums;
+    font-weight: 800; font-size: 19px; letter-spacing: -.01em; white-space: nowrap;
+  }
+  .rank .dps small { display: block; font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: .03em; }
+  .rank.top1 .no { color: #d4a017; }
 
   /* ---- list ---- */
   .hint { color: var(--muted); font-size: 12px; padding: 14px 4px 6px; }
@@ -395,15 +425,23 @@
       <button class="chip shadow" id="mShadow" aria-pressed="false">🟣 シャドウレイド</button>
     </div>
     <div class="browse" id="browse">
-      <div class="seg" role="group" aria-label="表示するポケモンの範囲">
-        <button type="button" class="seg-btn" id="scopeRaid" aria-pressed="true">伝説・幻・UB</button>
-        <button type="button" class="seg-btn" id="scopeAll" aria-pressed="false">全ポケモン</button>
+      <div class="seg" role="group" aria-label="表示の切替">
+        <button type="button" class="seg-btn" id="viewCP" aria-pressed="true">捕獲CP</button>
+        <button type="button" class="seg-btn" id="viewDPS" aria-pressed="false">火力ランキング</button>
       </div>
       <button type="button" class="chip" id="typeToggle" aria-expanded="false"
               aria-controls="typePanel" aria-pressed="false">絞り込み</button>
     </div>
     <div class="typepanel" id="typePanel" hidden>
-      <button type="button" class="chip" id="hideUn" aria-pressed="false">未実装を隠す</button>
+      <div class="seg" id="scopeSeg" role="group" aria-label="表示するポケモンの範囲">
+        <button type="button" class="seg-btn" id="scopeRaid" aria-pressed="true">伝説・幻・UB</button>
+        <button type="button" class="seg-btn" id="scopeAll" aria-pressed="false">全ポケモン</button>
+      </div>
+      <div class="tgrid">
+        <button type="button" class="chip" id="hideUn" aria-pressed="false">未実装を隠す</button>
+        <button type="button" class="chip" id="megaInc" aria-pressed="true" hidden>メガを含む</button>
+      </div>
+      <div class="tlabel" id="tlabel"></div>
       <div class="tgrid" id="typeGrid"></div>
     </div>
   </header>
@@ -483,6 +521,9 @@
     scopeAll: false,                 // 一覧に全ポケモンを出すか（既定は伝説・幻・UB）
     hideUn: false,                   // 未実装を隠すか
     types: [],                       // 絞り込むタイプ（TYPES の添字）。検索語と同じ扱いで保存しない
+    view: "cp",                      // "cp" = 捕獲CP一覧 / "dps" = 火力ランキング
+    dpsType: 0,                      // ランキングするタイプ
+    mega: true,                      // ランキングにメガを含めるか
     q: "", sel: -1
   };
   var LS = "pogoRaidCP.v1";
@@ -492,13 +533,17 @@
     state.shadow = !!saved.shadow;
     state.scopeAll = !!saved.scopeAll;
     state.hideUn = !!saved.hideUn;
+    if (saved.view === "dps") state.view = "dps";
+    if (typeof saved.dpsType === "number") state.dpsType = saved.dpsType;
+    if (saved.mega === false) state.mega = false;
   } catch (e) { /* localStorage 不可でも動く */ }
 
   function persist() {
     try {
       localStorage.setItem(LS, JSON.stringify({
         weather: state.weather, shadow: state.shadow,
-        scopeAll: state.scopeAll, hideUn: state.hideUn
+        scopeAll: state.scopeAll, hideUn: state.hideUn,
+        view: state.view, dpsType: state.dpsType, mega: state.mega
       }));
     } catch (e) { /* noop */ }
   }
@@ -519,6 +564,11 @@
   var $browse = document.getElementById("browse");
   var $typeToggle = document.getElementById("typeToggle");
   var $typePanel = document.getElementById("typePanel");
+  var $viewCP = document.getElementById("viewCP");
+  var $viewDPS = document.getElementById("viewDPS");
+  var $scopeSeg = document.getElementById("scopeSeg");
+  var $megaInc = document.getElementById("megaInc");
+  var $tlabel = document.getElementById("tlabel");
   var $sheet = document.getElementById("sheet");
   var $dName = document.getElementById("dName");
   var $dBody = document.getElementById("dBody");
@@ -568,6 +618,82 @@
     ALL_LIST.push(i);
     if (p[9] >= 1) RAID_LIST.push(i);
   });
+
+  // ---- 火力ランキング ------------------------------------------------------
+  // 「通常技とゲージ技を効率よく回したときの毎秒ダメージ」で並べる。
+  // ゲージ技が選んだタイプのものに限り、そのタイプに弱い相手（×1.6）を想定する。
+  // 攻撃側は Lv40・個体値15、相手の防御は 200 固定。全員に同じ係数がかかるだけなので
+  // 順位には影響せず、数値の目安として置いている。
+  var DPS_LEVEL = 40, DPS_IV = 15, BOSS_DEF = 200;
+
+  function moveDamage(m, p, atk, t) {
+    var stab = (m[1] === p[7] || m[1] === p[8]) ? 1.2 : 1;
+    var eff = m[1] === t ? 1.6 : 1;
+    return Math.floor(0.5 * m[2] * (atk / BOSS_DEF) * stab * eff) + 1;
+  }
+
+  // そのタイプで殴るときのいちばん強い技構成を探す
+  function bestMoveset(i, t) {
+    var p = MONS[i];
+    var atk = (p[4] + DPS_IV) * cpmOf(DPS_LEVEL);
+    var fasts = p[10].concat(p[12]);
+    var charged = p[11].concat(p[13], p[17] || []);
+    var best = null;
+    for (var ci = 0; ci < charged.length; ci++) {
+      var c = MOVES[charged[ci]];
+      if (c[1] !== t) continue;
+      var ec = Math.abs(c[3]);
+      if (!ec) continue;
+      var dc = moveDamage(c, p, atk, t), tc = c[4] / 1000;
+      for (var fi = 0; fi < fasts.length; fi++) {
+        var f = MOVES[fasts[fi]];
+        if (f[3] <= 0 || f[4] <= 0) continue;
+        var n = Math.ceil(ec / f[3]);
+        var dps = (n * moveDamage(f, p, atk, t) + dc) / (n * f[4] / 1000 + tc);
+        if (!best || dps > best.dps) best = { dps: dps, f: fasts[fi], c: charged[ci] };
+      }
+    }
+    return best;
+  }
+
+  function bulkOf(p) { return (p[6] + 15) * (p[5] + 15) / 1000; }
+
+  // ムゲンダイマックスはマックスバトルのボスとしてだけ存在する姿で、
+  // 手持ちとして使えない（種族値 251/505/452、耐久が他の5倍になる）。
+  // ランキングに混ぜると意味がないので外す。CP一覧のタブには残す。
+  var NOT_ATTACKER = { ETERNATUS_ETERNAMAX: 1 };
+
+  function buildRanking() {
+    var t = state.dpsType;
+    var q = state.q ? norm(state.q) : "";
+    var out = [];
+    MONS.forEach(function (p, i) {
+      if (NOT_ATTACKER[p[0]]) return;
+      if (state.hideUn && p[15] !== 1) return;
+      if (p[16] && !state.mega) return;
+      if (q && INDEX[i].indexOf(q) < 0) return;
+      var b = bestMoveset(i, t);
+      if (b) out.push({ i: i, dps: b.dps, f: b.f, c: b.c });
+    });
+    out.sort(function (x, y) { return y.dps - x.dps; });
+    return out;
+  }
+
+  function rankHTML(d, pos) {
+    var p = MONS[d.i];
+    var cb = CLASS_BADGE[p[9]];
+    return '<button type="button" class="rank' + (pos === 1 ? " top1" : "") +
+      '" data-i="' + d.i + '">' +
+      '<div class="no">' + pos + "</div>" +
+      '<div class="nm">' + esc(p[1]) +
+        (cb ? ' <span class="badge ' + cb[1] + '">' + cb[0] + "</span>" : "") +
+        (p[16] ? ' <span class="badge b-forms">' + (p[16] === 2 ? "ゲンシ" : "メガ") + "</span>" : "") +
+        (p[15] !== 1 ? ' <span class="badge b-unreleased">未実装</span>' : "") + "</div>" +
+      '<div class="mv">' + esc(MOVES[d.f][0]) + " / " + esc(MOVES[d.c][0]) + "</div>" +
+      '<div class="dps">' + d.dps.toFixed(1) + "<small>DPS ・ 耐久" +
+        bulkOf(p).toFixed(0) + "</small></div>" +
+      "</button>";
+  }
 
   function passesFilter(i) {
     var p = MONS[i];
@@ -743,6 +869,7 @@
   }
 
   var section = null;   // いま行を追加している地方の入れ物
+  var rankPos = 1;      // ランキングの通し番号（追記描画をまたいで続ける）
 
   function appendChunk() {
     if (!pending.length) return;
@@ -750,26 +877,30 @@
     var n = Math.min(PAGE, pending.length);
     var html = "";
 
-    function flush() {
-      if (!html) return;
-      (section || $list).insertAdjacentHTML("beforeend", html);
-      html = "";
-    }
-
-    for (var k = 0; k < n; k++) {
-      var d = pending[k];
-      var reg = regionOf(MONS[d.i][3]);
-      if (showRegions && reg !== lastRegion) {
-        flush();   // 前の地方のぶんを先に書き出す
-        lastRegion = reg;
-        section = document.createElement("section");
-        section.className = "rgroup";
-        section.innerHTML = regionHTML(reg, regionCount[reg] || 0);
-        $list.appendChild(section);
+    if (state.view === "dps") {
+      for (var r = 0; r < n; r++) html += rankHTML(pending[r], rankPos++);
+      $list.insertAdjacentHTML("beforeend", html);
+    } else {
+      var flush = function () {
+        if (!html) return;
+        (section || $list).insertAdjacentHTML("beforeend", html);
+        html = "";
+      };
+      for (var k = 0; k < n; k++) {
+        var d = pending[k];
+        var reg = regionOf(MONS[d.i][3]);
+        if (showRegions && reg !== lastRegion) {
+          flush();   // 前の地方のぶんを先に書き出す
+          lastRegion = reg;
+          section = document.createElement("section");
+          section.className = "rgroup";
+          section.innerHTML = regionHTML(reg, regionCount[reg] || 0);
+          $list.appendChild(section);
+        }
+        html += rowHTML(d, lv, fl);
       }
-      html += rowHTML(d, lv, fl);
+      flush();
     }
-    flush();
 
     pending = pending.slice(n);
     $more.textContent = pending.length ? "残り " + pending.length + " 件を表示" : "";
@@ -777,13 +908,10 @@
   }
 
   function renderList() {
+    if (state.view === "dps") return renderRanking();
     var hits = search(state.q);
     showRegions = !state.q;
     lastRegion = -1;
-
-    // 検索中は全種が対象なので、範囲の切替は効かない。出しっぱなしだと
-    // 押しても何も起きないボタンになるので隠す。
-    $scopeRaid.parentNode.hidden = !!state.q;
 
     regionCount = {};
     if (showRegions) {
@@ -807,6 +935,28 @@
       ? hits.length + " 件" + fx
       : scopeName + " " + hits.length + " 件を地方順に表示中" + fx +
         "。名前を入力すると全 " + MONS.length + " 種から検索します。";
+
+    $list.innerHTML = hits.length ? "" : '<div class="hint">該当なし</div>';
+    section = null;
+    pending = hits;
+    $more.hidden = true;
+    measureHeader();
+    appendChunk();
+    fillViewport();
+  }
+
+  function renderRanking() {
+    var hits = buildRanking();
+    showRegions = false;
+    rankPos = 1;
+
+    var conds = [TYPES[state.dpsType] + "タイプ"];
+    if (!state.mega) conds.push("メガを除く");
+    if (state.hideUn) conds.push("未実装を除く");
+    if (state.q) conds.push("「" + state.q + "」で絞り込み");
+    $hint.textContent = conds.join(" / ") + " ・ " + hits.length +
+      "件。ゲージ技が" + TYPES[state.dpsType] +
+      "タイプの構成のうち、いちばんDPSが高いものを載せています。";
 
     $list.innerHTML = hits.length ? "" : '<div class="hint">該当なし</div>';
     section = null;
@@ -1076,6 +1226,11 @@
   // 天候ブースト／シャドウは一覧と詳細の両方から切り替えられるので、
   // 状態を1か所で持って、表示中のボタンをまとめて合わせる。
   function syncChips() {
+    var dps = state.view === "dps";
+    $viewCP.setAttribute("aria-pressed", String(!dps));
+    $viewDPS.setAttribute("aria-pressed", String(dps));
+    // ランキングでは天候ブースト／シャドウは関係ないので隠す
+    $mW.parentNode.hidden = dps;
     $mW.setAttribute("aria-pressed", String(state.weather));
     $mS.setAttribute("aria-pressed", String(state.shadow));
     $scopeRaid.setAttribute("aria-pressed", String(!state.scopeAll));
@@ -1105,6 +1260,25 @@
   $scopeRaid.addEventListener("click", function () { setScope(false); });
   $scopeAll.addEventListener("click", function () { setScope(true); });
 
+  function setView(v) {
+    if (state.view === v) return;
+    state.view = v;
+    persist();
+    syncChips();
+    syncTypes();
+    renderList();
+    window.scrollTo(0, 0);
+  }
+  $viewCP.addEventListener("click", function () { setView("cp"); });
+  $viewDPS.addEventListener("click", function () { setView("dps"); });
+
+  $megaInc.addEventListener("click", function () {
+    state.mega = !state.mega;
+    persist();
+    syncTypes();
+    renderList();
+  });
+
   $hideUn.addEventListener("click", function () {
     state.hideUn = !state.hideUn;
     persist();
@@ -1125,7 +1299,15 @@
   })();
 
   function syncTypes() {
-    var n = state.types.length + (state.hideUn ? 1 : 0);
+    var dps = state.view === "dps";
+    // ランキングは1タイプを選ぶ。CP一覧は複数選択で絞り込む。
+    $scopeSeg.hidden = dps || !!state.q;
+    $megaInc.hidden = !dps;
+    $megaInc.setAttribute("aria-pressed", String(state.mega));
+    $tlabel.textContent = dps ? "ランキングするタイプ" : "タイプで絞り込む（複数選ぶとAND）";
+
+    var n = dps ? (state.hideUn ? 1 : 0) + (state.mega ? 0 : 1)
+                : state.types.length + (state.hideUn ? 1 : 0);
     var open = !$typePanel.hidden;
     // 開いているかどうかと、絞り込みが効いているかどうかは別物なので両方出す。
     // 数字＝絞り込み中、矢印＝パネルの開閉。
@@ -1134,13 +1316,14 @@
     $typeToggle.setAttribute("aria-expanded", String(open));
     Array.prototype.forEach.call($typePanel.querySelectorAll(".tbtn"), function (b) {
       var idx = parseInt(b.dataset.type, 10);
-      var on = state.types.indexOf(idx) >= 0;
+      var on = dps ? idx === state.dpsType : state.types.indexOf(idx) >= 0;
       b.setAttribute("aria-pressed", String(on));
       // 選択中はそのタイプの色で塗る
       b.style.background = on ? (TYPE_COLOR[TYPES[idx]] || "#888") : "";
     });
-    // 「タイプを解除」はタイプを選んでいるときだけ。未実装を隠すは対象外
-    document.getElementById("typeClear").hidden = state.types.length === 0;
+    // 「タイプを解除」はCP一覧でタイプを選んでいるときだけ。
+    // ランキングは必ず1つ選んでいる状態なので出さない。
+    document.getElementById("typeClear").hidden = dps || state.types.length === 0;
   }
 
   $typeToggle.addEventListener("click", function () {
@@ -1153,9 +1336,13 @@
     var btn = e.target.closest(".tbtn");
     if (btn) {
       var idx = parseInt(btn.dataset.type, 10);
-      var at = state.types.indexOf(idx);
-      if (at >= 0) state.types.splice(at, 1);
-      else state.types.push(idx);
+      if (state.view === "dps") {
+        state.dpsType = idx;          // ランキングは1つだけ
+      } else {
+        var at = state.types.indexOf(idx);
+        if (at >= 0) state.types.splice(at, 1);
+        else state.types.push(idx);
+      }
     } else if (e.target.closest(".tclear")) {
       state.types = [];
     } else {
@@ -1167,7 +1354,7 @@
   });
 
   $list.addEventListener("click", function (e) {
-    var row = e.target.closest(".row");
+    var row = e.target.closest(".row, .rank");
     if (row) openDetail(parseInt(row.dataset.i, 10));
   });
   $more.addEventListener("click", function () { appendChunk(); fillViewport(); });
