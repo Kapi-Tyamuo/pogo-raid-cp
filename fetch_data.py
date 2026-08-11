@@ -382,6 +382,30 @@ pokemon += megas
 pokemon.sort(key=lambda e: (e[3], 1 if e[16] else 0,
                             0 if e[0] in PREFERRED_FIRST else 1, e[0]))
 
+# --- 強化コスト --------------------------------------------------------------
+# POKEMON_UPGRADE_SETTINGS。配列は「レベルの整数部 - 1」で引く。
+# upgradesPerLevel=2 なので、1段階＝0.5レベル。同じレベル内の2回は同額。
+#   stardustCost[floor(L)-1]  … そのレベルからの1段階に要るほしのすな
+#   candyCost[floor(L)-1]     … 同じくアメ（Lv40以上は0で、代わりにXLアメ）
+#   xlCandyCost[floor(L)-40]  … Lv40以上の1段階に要るXLアメ
+upgrade = None
+for e in gm:
+    u = e.get("data", {}).get("pokemonUpgrades")
+    if u and "OVERRIDE" not in e["templateId"]:
+        upgrade = {
+            "dust": u["stardustCost"],
+            "candy": u["candyCost"],
+            "xl": u["xlCandyCost"],
+            "xlFrom": u["xlCandyMinPokemonLevel"],
+            "maxLevel": u["maxNormalUpgradeLevel"],
+            "perLevel": u["upgradesPerLevel"],
+            "shadowDust": u["shadowStardustMultiplier"],
+            "shadowCandy": u["shadowCandyMultiplier"],
+        }
+        break
+if not upgrade:
+    sys.exit("game_master から強化コストが取れませんでした")
+
 cpm = None
 for e in gm:
     d = e.get("data", {})
@@ -394,7 +418,7 @@ if not cpm:
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 json.dump(
     {"types": types, "moves": [moves[m] for m in move_ids],
-     "moveIds": move_ids, "pokemon": pokemon, "cpm": cpm},
+     "moveIds": move_ids, "pokemon": pokemon, "cpm": cpm, "upgrade": upgrade},
     io.open(OUT, "w", encoding="utf-8"),
     ensure_ascii=False, separators=(",", ":"),
 )

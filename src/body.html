@@ -339,6 +339,7 @@
   .rangeline b { color: var(--text); font-variant-numeric: tabular-nums; font-size: 15px; }
 
   .iv-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .iv-inputs .wide { grid-column: 1 / -1; }
   .field label { display: block; font-size: 11px; color: var(--muted); font-weight: 700; margin-bottom: 4px; letter-spacing: .04em; }
   .field input {
     width: 100%; padding: 11px 12px; font-size: 17px; font-variant-numeric: tabular-nums;
@@ -473,6 +474,63 @@
 
   // ---- CP / HP -----------------------------------------------------------
   function cpmOf(lv) { return CPM[lv - 1]; }
+
+  // 強化は0.5刻み。半端なレベルのCPMは前後の二乗平均から出す（ゲームと同じ）。
+  function cpmAt(lv) {
+    var lo = Math.floor(lv);
+    var a = CPM[lo - 1];
+    if (lv === lo) return a;
+    var b = CPM[lo];
+    return Math.sqrt((a * a + b * b) / 2);
+  }
+
+  var UP = D.upgrade;
+  var MAX_LV = UP.maxLevel;   // 強化で上げられる上限（バディの+1は含まない）
+
+  // CPとHPから、ありうるレベルを割り出す。CPだけだと複数出ることがある。
+  function solveLevels(p, cp, hp, dust) {
+    var a = p[4], d = p[5], s = p[6];
+    var out = [];
+    for (var lv = 1; lv <= 51; lv += 0.5) {
+      // ゲームの強化ボタンに出るすなの額はレベルの整数部で決まるので、
+      // 入れてもらえるとレベルを1つ分の幅に絞れる
+      if (dust && UP.dust[Math.floor(lv) - 1] !== dust) continue;
+      var m = cpmAt(lv), k = m * m / 10;
+      var hit = null;
+      for (var is = 0; is <= 15; is++) {
+        if (hp) {
+          var h = Math.floor((s + is) * m);
+          if (h < 10) h = 10;
+          if (h !== hp) continue;
+        }
+        var ss = Math.sqrt(s + is);
+        for (var id = 0; id <= 15; id++) {
+          var base = Math.sqrt(d + id) * ss * k;
+          for (var ia = 0; ia <= 15; ia++) {
+            var v = Math.floor((a + ia) * base);
+            if (v < 10) v = 10;
+            if (v === cp) { if (!hit) hit = []; hit.push([ia, id, is]); }
+          }
+        }
+      }
+      if (hit) out.push({ lv: lv, ivs: hit });
+    }
+    return out;
+  }
+
+  // from から to まで0.5刻みで積む。配列はレベルの整数部で引く。
+  function upgradeCost(from, to) {
+    var dust = 0, candy = 0, xl = 0;
+    for (var lv = from; lv < to - 1e-9; lv += 0.5) {
+      var i = Math.floor(lv) - 1;
+      dust += UP.dust[i] || 0;
+      candy += UP.candy[i] || 0;
+      if (lv >= UP.xlFrom) xl += UP.xl[Math.floor(lv) - UP.xlFrom] || 0;
+    }
+    return { dust: dust, candy: candy, xl: xl };
+  }
+
+  function comma(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
   function calcCP(a, d, s, ia, id, is, lv) {
     var m = cpmOf(lv);
@@ -998,7 +1056,7 @@
   // keep=true は同じポケモンを条件だけ変えて描き直すとき。
   // 入力済みのCP/HPとスクロール位置を保つ。
   function openDetail(i, keep) {
-    if (!keep) { state.cpIn = ""; state.hpIn = ""; }
+    if (!keep) { state.cpIn = ""; state.hpIn = ""; state.upCpIn = ""; state.upHpIn = ""; state.upDustIn = ""; }
     var prevScroll = keep ? $sheet.scrollTop : 0;
     state.sel = i;
     var p = MONS[i];
@@ -1082,6 +1140,20 @@
     html += '<div class="card"><h3>CP早見表</h3><div class="scrollx">' + cpt + "</div>" +
       '<div class="note" style="padding:0;margin-top:10px">Lv51（バディ最高ランク）で 15/15/15：<b>' +
       calcCP(a, d, s, 15, 15, 15, 51) + "</b> CP</div></div>";
+
+    // 強化コスト。メガは強化できない（元の姿を強化する）ので出さない。
+    html += isMega ? "" : ('<div class="card">' +
+      "<h3>強化コスト</h3>" +
+      '<div class="iv-inputs">' +
+        '<div class="field"><label>今のCP</label>' +
+          '<input id="upCP" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="手持ちのCP"></div>' +
+        '<div class="field"><label>HP（任意）</label>' +
+          '<input id="upHP" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="任意"></div>' +
+        '<div class="field wide"><label>次の強化に必要なほしのすな（任意）</label>' +
+          '<input id="upDust" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="ゲームの強化ボタンに出る数字"></div>' +
+      "</div>" +
+      '<div class="result" id="upResult"></div>' +
+      "</div>");
 
     // 種族値
     html += '<div class="card"><h3>種族値（GO）</h3><table class="stats">' +
@@ -1183,6 +1255,73 @@
 
     $cp.addEventListener("input", solve);
     $hp.addEventListener("input", solve);
+
+    var $ucp = document.getElementById("upCP");
+    var $uhp = document.getElementById("upHP");
+    var $udust = document.getElementById("upDust");
+    var $ures = document.getElementById("upResult");
+
+    // 候補が絞れていないときは、いちばん低いレベル（高くつく側）といちばん高い
+    // レベル（安くつく側）で範囲にして出す。1つに決まっていれば1つの数字になる。
+    function span(a, b, fmt) {
+      var x = fmt ? fmt(a) : a, y = fmt ? fmt(b) : b;
+      if (!a && !b) return "—";
+      return x === y ? x : y + "〜" + x;
+    }
+    function costRow(to, lo, hi) {
+      var c1 = upgradeCost(lo, to), c2 = upgradeCost(Math.min(hi, to), to);
+      return "<tr><td>Lv" + to + "まで</td><td>" + span(c1.dust, c2.dust, comma) +
+        "</td><td>" + span(c1.candy, c2.candy) + "</td><td>" + span(c1.xl, c2.xl) + "</td></tr>";
+    }
+
+    function solveUpgrade() {
+      state.upCpIn = $ucp.value;
+      state.upHpIn = $uhp.value;
+      state.upDustIn = $udust.value;
+      var cp = parseInt($ucp.value, 10);
+      var hp = parseInt($uhp.value, 10);
+      var dust = parseInt($udust.value, 10);
+      if (!cp) { $ures.innerHTML = ""; return; }
+
+      var got = solveLevels(p, cp, hp, dust);
+      if (!got.length) {
+        $ures.innerHTML = '<div class="verdict bad">そのCPになる組み合わせがありません。CP / HP を確認してください。</div>';
+        return;
+      }
+
+      var lo = got[0].lv, hi = got[got.length - 1].lv;
+      var head = lo === hi ? "推定レベル：Lv" + lo
+        : "推定レベル：Lv" + lo + " 〜 Lv" + hi + "（" + got.length + "通り）";
+      var tip = lo !== hi
+        ? '<div class="note" style="padding:0;margin-top:10px">' +
+          "強化ボタンに出るほしのすなの額を入れると、レベルがほぼ1つに決まります。</div>" : "";
+
+      var body;
+      if (lo >= MAX_LV) {
+        body = '<div class="note" style="padding:0;margin-top:8px">Lv' + MAX_LV + " まで強化済みです。</div>";
+      } else {
+        // 候補が複数あるときは、いちばん低いレベル＝いちばん高くつく側で出す
+        var rows = "";
+        if (lo < 40) rows += costRow(40, lo, hi);
+        rows += costRow(MAX_LV, lo, hi);
+        body = '<div class="scrollx"><table class="cptable">' +
+          "<tr><th>目標</th><th>ほしのすな</th><th>アメ</th><th>XLアメ</th></tr>" +
+          rows + "</table></div>" +
+          '<div class="note" style="padding:0;margin-top:10px">' +
+          "シャドウは1.2倍、リトレーンしたポケモンは0.9倍になります。</div>";
+      }
+      $ures.innerHTML = '<div class="verdict">' + head + "</div>" + body + tip;
+    }
+
+    if ($ucp) {
+      $ucp.addEventListener("input", solveUpgrade);
+      $uhp.addEventListener("input", solveUpgrade);
+      $udust.addEventListener("input", solveUpgrade);
+      $ucp.value = state.upCpIn || "";
+      $uhp.value = state.upHpIn || "";
+      $udust.value = state.upDustIn || "";
+      if ($ucp.value) solveUpgrade();
+    }
 
     // 条件を切り替えて描き直したときは、入力と見ていた位置を戻す
     $cp.value = state.cpIn || "";
