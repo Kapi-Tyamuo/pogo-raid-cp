@@ -401,7 +401,16 @@ for e in gm:
             "perLevel": u["upgradesPerLevel"],
             "shadowDust": u["shadowStardustMultiplier"],
             "shadowCandy": u["shadowCandyMultiplier"],
+            "purifiedDust": u["purifiedStardustMultiplier"],
+            "purifiedCandy": u["purifiedCandyMultiplier"],
         }
+        break
+
+# キラはほしのすなだけ割引（アメは変わらない）
+for e in gm:
+    lp = e.get("data", {}).get("luckyPokemonSettings")
+    if lp:
+        upgrade["luckyDust"] = lp["powerUpStardustDiscountPercent"]
         break
 if not upgrade:
     sys.exit("game_master から強化コストが取れませんでした")

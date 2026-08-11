@@ -340,6 +340,8 @@
 
   .iv-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .iv-inputs .wide { grid-column: 1 / -1; }
+  .upkind { margin-bottom: 10px; }
+  .upkind .seg-btn { padding: 6px 10px; font-size: 12px; flex: 1; }
   .field label { display: block; font-size: 11px; color: var(--muted); font-weight: 700; margin-bottom: 4px; letter-spacing: .04em; }
   .field input {
     width: 100%; padding: 11px 12px; font-size: 17px; font-variant-numeric: tabular-nums;
@@ -518,14 +520,31 @@
     return out;
   }
 
+  // ポケモンの状態ごとの倍率。キラはほしのすなだけ割引でアメは変わらない。
+  var UP_KINDS = [
+    ["normal", "通常", 1, 1],
+    ["shadow", "シャドウ", UP.shadowDust, UP.shadowCandy],
+    ["purified", "リトレーン", UP.purifiedDust, UP.purifiedCandy],
+    ["lucky", "キラ", UP.luckyDust, 1]
+  ];
+
+  function upKindOf(id) {
+    for (var k = 0; k < UP_KINDS.length; k++) if (UP_KINDS[k][0] === id) return UP_KINDS[k];
+    return UP_KINDS[0];
+  }
+
   // from から to まで0.5刻みで積む。配列はレベルの整数部で引く。
-  function upgradeCost(from, to) {
+  // 倍率は1段階ごとにかける（ゲームは強化1回ぶんの額を表示するため）。
+  // すなは元が100の倍数で ×1.2 / ×0.9 / ×0.5 でも整数になるが、
+  // アメは端数が出るのでその都度四捨五入する。
+  function upgradeCost(from, to, kind) {
+    var k = upKindOf(kind), md = k[2], mc = k[3];
     var dust = 0, candy = 0, xl = 0;
     for (var lv = from; lv < to - 1e-9; lv += 0.5) {
       var i = Math.floor(lv) - 1;
-      dust += UP.dust[i] || 0;
-      candy += UP.candy[i] || 0;
-      if (lv >= UP.xlFrom) xl += UP.xl[Math.floor(lv) - UP.xlFrom] || 0;
+      dust += Math.round((UP.dust[i] || 0) * md);
+      candy += Math.round((UP.candy[i] || 0) * mc);
+      if (lv >= UP.xlFrom) xl += Math.round((UP.xl[Math.floor(lv) - UP.xlFrom] || 0) * mc);
     }
     return { dust: dust, candy: candy, xl: xl };
   }
@@ -562,6 +581,7 @@
     scopeAll: false,                 // 一覧に全ポケモンを出すか（既定は伝説・幻・UB）
     hideUn: false,                   // 未実装を隠すか
     types: [],                       // 絞り込むタイプ（TYPES の添字）。検索語と同じ扱いで保存しない
+    upKind: "normal",                // 強化コストを出すときのポケモンの状態
     view: "cp",                      // "cp" = 捕獲CP一覧 / "dps" = 火力ランキング
     dpsType: 0,                      // ランキングするタイプ
     mega: true,                      // ランキングにメガを含めるか
@@ -1056,7 +1076,7 @@
   // keep=true は同じポケモンを条件だけ変えて描き直すとき。
   // 入力済みのCP/HPとスクロール位置を保つ。
   function openDetail(i, keep) {
-    if (!keep) { state.cpIn = ""; state.hpIn = ""; state.upCpIn = ""; state.upHpIn = ""; state.upDustIn = ""; }
+    if (!keep) { state.cpIn = ""; state.hpIn = ""; state.upCpIn = ""; state.upHpIn = ""; state.upDustIn = ""; state.upKind = "normal"; }
     var prevScroll = keep ? $sheet.scrollTop : 0;
     state.sel = i;
     var p = MONS[i];
@@ -1144,6 +1164,12 @@
     // 強化コスト。メガは強化できない（元の姿を強化する）ので出さない。
     html += isMega ? "" : ('<div class="card">' +
       "<h3>強化コスト</h3>" +
+      '<div class="seg upkind" id="upKinds" role="group" aria-label="ポケモンの状態">' +
+        UP_KINDS.map(function (k) {
+          return '<button type="button" class="seg-btn" data-kind="' + k[0] +
+            '" aria-pressed="' + (state.upKind === k[0]) + '">' + k[1] + "</button>";
+        }).join("") +
+      "</div>" +
       '<div class="iv-inputs">' +
         '<div class="field"><label>今のCP</label>' +
           '<input id="upCP" type="number" inputmode="numeric" pattern="[0-9]*" placeholder="手持ちのCP"></div>' +
@@ -1269,7 +1295,7 @@
       return x === y ? x : y + "〜" + x;
     }
     function costRow(to, lo, hi) {
-      var c1 = upgradeCost(lo, to), c2 = upgradeCost(Math.min(hi, to), to);
+      var c1 = upgradeCost(lo, to, state.upKind), c2 = upgradeCost(Math.min(hi, to), to, state.upKind);
       return "<tr><td>Lv" + to + "まで</td><td>" + span(c1.dust, c2.dust, comma) +
         "</td><td>" + span(c1.candy, c2.candy) + "</td><td>" + span(c1.xl, c2.xl) + "</td></tr>";
     }
@@ -1307,10 +1333,25 @@
         body = '<div class="scrollx"><table class="cptable">' +
           "<tr><th>目標</th><th>ほしのすな</th><th>アメ</th><th>XLアメ</th></tr>" +
           rows + "</table></div>" +
-          '<div class="note" style="padding:0;margin-top:10px">' +
-          "シャドウは1.2倍、リトレーンしたポケモンは0.9倍になります。</div>";
+          (state.upKind === "normal" ? "" :
+            '<div class="note" style="padding:0;margin-top:10px">' +
+            upKindOf(state.upKind)[1] + "のぶんを反映しています（すな×" + upKindOf(state.upKind)[2] +
+            "、アメ×" + upKindOf(state.upKind)[3] + "）。</div>");
       }
       $ures.innerHTML = '<div class="verdict">' + head + "</div>" + body + tip;
+    }
+
+    var $ukinds = document.getElementById("upKinds");
+    if ($ukinds) {
+      $ukinds.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-kind]");
+        if (!b) return;
+        state.upKind = b.dataset.kind;
+        Array.prototype.forEach.call($ukinds.children, function (x) {
+          x.setAttribute("aria-pressed", String(x.dataset.kind === state.upKind));
+        });
+        solveUpgrade();
+      });
     }
 
     if ($ucp) {
