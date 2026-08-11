@@ -64,6 +64,15 @@ for _e in gm:
 def is_released(form_id, species_id):
     return 1 if (form_id in modeled or species_id in modeled) else 0
 
+
+# 一部のポケモンは専用の強化コスト表を持つ（ムゲンダイナ＝アメが30倍）。
+# 表そのものは下の方で組み立てるが、どの種が対象かは entry() で要るので先に集める。
+UPGRADE_OVERRIDE_KEYS = {
+    e["templateId"].split("_POKEMON_", 1)[1]
+    for e in gm
+    if "pokemonUpgrades" in e.get("data", {}) and "OVERRIDE" in e["templateId"]
+}
+
 types, type_index = [], {}
 moves, move_ids, move_index = {}, [], {}
 
@@ -178,6 +187,7 @@ def entry(p):
         is_released(p["formId"], p["id"]),
         0,   # メガシンカ種別（0=通常 / 1=メガシンカ / 2=ゲンシカイキ）
         [],  # 専用技（あとで埋める）
+        p["id"] if p["id"] in UPGRADE_OVERRIDE_KEYS else "",   # 専用のコスト表
     ]
 
 
@@ -209,6 +219,7 @@ def mega_entry(base, m, base_moves):
         1,      # 上のとおり、メガは実装状況を判定しない
         kind,
         [],     # 専用技（メガは元の姿のものを下で引き継ぐ）
+        base["id"] if base["id"] in UPGRADE_OVERRIDE_KEYS else "",
     ]
 
 
@@ -412,6 +423,23 @@ for e in gm:
     if lp:
         upgrade["luckyDust"] = lp["powerUpStardustDiscountPercent"]
         break
+
+# 一部のポケモンは専用のコスト表を持つ。ムゲンダイナはアメが30倍（Lv1→40 で
+# 9,980アメ、Lv40→50 で 8,900XLアメ）。既定表を使うと大きく外れる。
+# templateId は POKEMON_UPGRADE_OVERRIDE_SETTINGS_V0890_POKEMON_ETERNATUS の形。
+upgrade["overrides"] = {}
+for e in gm:
+    u = e.get("data", {}).get("pokemonUpgrades")
+    if not u or "OVERRIDE" not in e["templateId"]:
+        continue
+    key = e["templateId"].split("_POKEMON_", 1)[1]
+    upgrade["overrides"][key] = {
+        "dust": u["stardustCost"],
+        "candy": u["candyCost"],
+        "xl": u["xlCandyCost"],
+        "xlFrom": u["xlCandyMinPokemonLevel"],
+    }
+
 if not upgrade:
     sys.exit("game_master から強化コストが取れませんでした")
 

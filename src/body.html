@@ -537,14 +537,16 @@
   // 倍率は1段階ごとにかける（ゲームは強化1回ぶんの額を表示するため）。
   // すなは元が100の倍数で ×1.2 / ×0.9 / ×0.5 でも整数になるが、
   // アメは端数が出るのでその都度四捨五入する。
-  function upgradeCost(from, to, kind) {
+  function upgradeCost(from, to, kind, ovKey) {
     var k = upKindOf(kind), md = k[2], mc = k[3];
+    // ムゲンダイナのように専用のコスト表を持つ種はそちらを使う
+    var T = (ovKey && UP.overrides[ovKey]) || UP;
     var dust = 0, candy = 0, xl = 0;
     for (var lv = from; lv < to - 1e-9; lv += 0.5) {
       var i = Math.floor(lv) - 1;
-      dust += Math.round((UP.dust[i] || 0) * md);
-      candy += Math.round((UP.candy[i] || 0) * mc);
-      if (lv >= UP.xlFrom) xl += Math.round((UP.xl[Math.floor(lv) - UP.xlFrom] || 0) * mc);
+      dust += Math.round((T.dust[i] || 0) * md);
+      candy += Math.round((T.candy[i] || 0) * mc);
+      if (lv >= T.xlFrom) xl += Math.round((T.xl[Math.floor(lv) - T.xlFrom] || 0) * mc);
     }
     return { dust: dust, candy: candy, xl: xl };
   }
@@ -1198,6 +1200,7 @@
     $dBody.innerHTML = html;
     $sheet.classList.add("on");
     document.body.style.overflow = "hidden";
+    cancelPull();   // 引っぱりかけの transform を残さない
 
     document.getElementById("dWeather").addEventListener("click", function () { setMode("weather"); });
     document.getElementById("dShadow").addEventListener("click", function () { setMode("shadow"); });
@@ -1295,7 +1298,8 @@
       return x === y ? x : y + "〜" + x;
     }
     function costRow(to, lo, hi) {
-      var c1 = upgradeCost(lo, to, state.upKind), c2 = upgradeCost(Math.min(hi, to), to, state.upKind);
+      var c1 = upgradeCost(lo, to, state.upKind, p[18]);
+      var c2 = upgradeCost(Math.min(hi, to), to, state.upKind, p[18]);
       return "<tr><td>Lv" + to + "まで</td><td>" + span(c1.dust, c2.dust, comma) +
         "</td><td>" + span(c1.candy, c2.candy) + "</td><td>" + span(c1.xl, c2.xl) + "</td></tr>";
     }
@@ -1333,6 +1337,8 @@
         body = '<div class="scrollx"><table class="cptable">' +
           "<tr><th>目標</th><th>ほしのすな</th><th>アメ</th><th>XLアメ</th></tr>" +
           rows + "</table></div>" +
+          (p[18] ? '<div class="note" style="padding:0;margin-top:10px">' +
+            "このポケモンは専用のコスト表を持っていて、アメの必要数が通常と大きく違います。</div>" : "") +
           (state.upKind === "normal" ? "" :
             '<div class="note" style="padding:0;margin-top:10px">' +
             upKindOf(state.upKind)[1] + "のぶんを反映しています（すな×" + upKindOf(state.upKind)[2] +
@@ -1372,6 +1378,7 @@
   }
 
   function closeDetail() {
+    cancelPull();   // 引っぱりかけの transform を残さない
     $sheet.classList.remove("on");
     document.body.style.overflow = "";
     state.sel = -1;
@@ -1535,6 +1542,10 @@
   // ---- 引っぱって更新 ------------------------------------------------------
   // ホーム画面から起動した PWA には Safari の更新機能が無く、キャッシュ優先で
   // 動くので、起動し直さないと新しい版に気づけない。自前で用意する。
+  // 詳細画面の開閉時に呼ぶ。引っぱりの途中で画面が切り替わると transform が
+  // 残り、iOS では祖先の transform が文字カーソルの位置をずらす。
+  var cancelPull = function () {};
+
   // タッチ環境の判定は端末によって当てにならないので条件を付けない。
   // タッチが無ければイベントが発火しないだけで害はない。
   (function () {
@@ -1655,6 +1666,20 @@
     }, { passive: true });
 
     addEventListener("touchcancel", reset, { passive: true });
+
+    // 途中で画面が変わったときは、アニメーションを待たずにその場で戻す
+    cancelPull = function () {
+      armed = active = false; dist = 0; busy = false;
+      $ptr.classList.remove("show", "ready", "ptr-settle");
+      $ptr.style.opacity = "";
+      $ptr.style.transform = "";
+      [content, contentEl(), document.querySelector(".wrap")].forEach(function (el) {
+        if (!el) return;
+        el.classList.remove("ptr-settle");
+        el.style.transform = "";
+      });
+      content = null;
+    };
   })();
 
   // ---- init --------------------------------------------------------------
