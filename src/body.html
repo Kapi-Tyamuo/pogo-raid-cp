@@ -54,6 +54,10 @@
   }
 
   * { box-sizing: border-box; }
+  /* display を指定したクラス（.modes や .browse など）が UA スタイルの
+     [hidden]{display:none} に詳細度で勝ってしまうので、まとめて打ち消す。
+     個別に .foo[hidden] を書き足す運用は漏れる。 */
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);
@@ -138,7 +142,6 @@
     display: flex; background: var(--panel-2); border: 1px solid var(--line);
     border-radius: 999px; padding: 2px;
   }
-  .seg[hidden] { display: none; }
   .seg-btn {
     border: 0; background: transparent; color: var(--muted);
     font: inherit; font-size: 12.5px; font-weight: 600;
@@ -153,7 +156,6 @@
     margin-top: 8px; padding: 8px 2px 2px;
     border-top: 1px solid var(--line);
   }
-  .typepanel[hidden] { display: none; }
   .tgrid { display: flex; flex-wrap: wrap; gap: 6px; }
   .tbtn {
     font: inherit; font-size: 12px; font-weight: 700;
@@ -169,7 +171,6 @@
     border: 1px dashed var(--accent); border-radius: 999px;
     padding: 5px 11px; cursor: pointer; white-space: nowrap;
   }
-  .tclear[hidden] { display: none; }
   .tlabel { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
 
   /* ---- 火力ランキング ---- */
@@ -248,8 +249,6 @@
     color: var(--muted); background: transparent;
     border: 1px dashed var(--line); border-radius: var(--radius); cursor: pointer;
   }
-  /* .more の display:block が UA の [hidden]{display:none} に勝つので明示的に消す */
-  .more[hidden] { display: none; }
   .more:hover { color: var(--accent); border-color: var(--accent); }
   .more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -414,11 +413,13 @@
       <button type="button" class="chip" id="typeToggle" aria-expanded="false"
               aria-controls="typePanel" aria-pressed="false">絞り込み</button>
     </div>
-    <div class="typepanel" id="typePanel" hidden>
+    <div class="browse">
       <div class="seg" id="scopeSeg" role="group" aria-label="表示するポケモンの範囲">
         <button type="button" class="seg-btn" id="scopeRaid" aria-pressed="true">伝説・幻・UB</button>
         <button type="button" class="seg-btn" id="scopeAll" aria-pressed="false">全ポケモン</button>
       </div>
+    </div>
+    <div class="typepanel" id="typePanel" hidden>
       <div class="tgrid">
         <button type="button" class="chip" id="hideUn" aria-pressed="false">未実装を隠す</button>
         <button type="button" class="chip" id="megaInc" aria-pressed="true" hidden>メガを含む</button>
@@ -890,6 +891,8 @@
   }
 
   function renderList() {
+    // 検索中は範囲の切替が効かないので、その出し分けもここで合わせる
+    syncTypes();
     if (state.view === "dps") return renderRanking();
     var hits = search(state.q);
     showRegions = !state.q;
@@ -1283,7 +1286,8 @@
   function syncTypes() {
     var dps = state.view === "dps";
     // ランキングは1タイプを選ぶ。CP一覧は複数選択で絞り込む。
-    $scopeSeg.hidden = dps || !!state.q;
+    // ランキングでは範囲の切替が効かないので、行ごと隠す
+    $scopeSeg.parentNode.hidden = dps || !!state.q;
     $megaInc.hidden = !dps;
     $megaInc.setAttribute("aria-pressed", String(state.mega));
     $tlabel.textContent = dps ? "ランキングするタイプ" : "タイプで絞り込む（複数選ぶとAND）";
